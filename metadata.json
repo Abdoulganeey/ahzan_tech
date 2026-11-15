@@ -1,0 +1,6 @@
+{
+  "name": "Ahzan Tech Ltd — Global Commodities & Industrial Trade Portal",
+  "description": "Corporate B2B trade portal for Ahzan Tech Ltd and AhzanEmporium (RC 2012723). Verified Nigerian critical minerals, international agro-commodities export, industrial wholesale supply, and Incoterms 2020 logistics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
