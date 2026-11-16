@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react';
 import {
   ArrowUpRight,
+  Check,
   ChevronDown,
   ChevronUp,
   PackageCheck,
+  Plus,
   Search,
   ShieldCheck,
 } from 'lucide-react';
@@ -12,9 +14,13 @@ import {
   type CommodityProduct,
   type ProductCategory,
 } from '../data/tradeData';
+import { useLanguage } from '../i18n/LanguageContext';
+import { CATEGORY_FR, PRODUCT_FR } from '../i18n/translations';
 
 interface ProductCatalogProps {
   onSelectProductForQuote: (productId: string) => void;
+  onAddToManifest: (productId: string) => void;
+  manifestProductIds?: string[];
 }
 
 const CATEGORIES: ('All' | ProductCategory)[] = [
@@ -57,7 +63,10 @@ function ResilientProductImage({ product }: { product: CommodityProduct }) {
 
 export default function ProductCatalog({
   onSelectProductForQuote,
+  onAddToManifest,
+  manifestProductIds = [],
 }: ProductCatalogProps) {
+  const { lang, t } = useLanguage();
   const [activeCategory, setActiveCategory] = useState<'All' | ProductCategory>(
     'All'
   );
@@ -75,13 +84,15 @@ export default function ProductCatalog({
         activeCategory === 'All' || item.category === activeCategory;
       if (!matchesCategory) return false;
       if (!q) return true;
+      const fr = PRODUCT_FR[item.id];
       return (
         item.name.toLowerCase().includes(q) ||
         item.shortName.toLowerCase().includes(q) ||
         item.category.toLowerCase().includes(q) ||
         item.hsCode.toLowerCase().includes(q) ||
         item.assayRef.toLowerCase().includes(q) ||
-        item.gradeOrPurity.toLowerCase().includes(q)
+        item.gradeOrPurity.toLowerCase().includes(q) ||
+        (fr ? fr.name.toLowerCase().includes(q) || fr.summary.toLowerCase().includes(q) : false)
       );
     });
   }, [activeCategory, searchQuery]);
@@ -93,13 +104,13 @@ export default function ProductCatalog({
         <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 mb-10">
           <div className="max-w-2xl">
             <p className="text-sm font-semibold text-amber-700 mb-2">
-              02. Export &amp; Wholesale Portfolio
+              {t.catalog.eyebrow}
             </p>
             <h2 className="font-display text-3xl sm:text-4xl font-bold tracking-tight text-slate-900 text-balance mb-3">
-              Verified Commodities &amp; Industrial Supply Catalog
+              {t.catalog.title}
             </h2>
             <p className="text-base text-slate-600 leading-relaxed">
-              Every export lot is backed by documented chain-of-custody, export-grade packaging, and mandatory SGS or Bureau Veritas pre-shipment verification.
+              {t.catalog.subtitle}
             </p>
           </div>
 
@@ -115,7 +126,7 @@ export default function ProductCatalog({
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search lithium, sesame, ZMGN057..."
+                placeholder={t.catalog.searchPlaceholder}
                 className="w-full h-11 pl-10 pr-4 text-sm text-slate-900 bg-slate-50 border border-slate-300 rounded-lg placeholder:text-slate-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
               />
             </div>
@@ -130,6 +141,12 @@ export default function ProductCatalog({
         >
           {CATEGORIES.map((category) => {
             const isActive = activeCategory === category;
+            const displayCategory =
+              lang === 'fr'
+                ? CATEGORY_FR[category] || category
+                : category === 'All'
+                  ? 'All Verticals'
+                  : category;
             return (
               <button
                 key={category}
@@ -143,7 +160,7 @@ export default function ProductCatalog({
                     : 'text-slate-700 hover:text-slate-900 hover:bg-white/60'
                 }`}
               >
-                {category === 'All' ? 'All Verticals' : category}
+                {displayCategory}
               </button>
             );
           })}
@@ -153,10 +170,10 @@ export default function ProductCatalog({
         {filteredProducts.length === 0 ? (
           <div className="py-16 text-center border border-slate-200 rounded-xl bg-slate-50">
             <p className="text-base font-semibold text-slate-900">
-              No matching commodities found
+              {t.catalog.emptyTitle}
             </p>
             <p className="text-sm text-slate-600 mt-1 mb-4">
-              Try clearing your search query or switching to All Verticals.
+              {t.catalog.emptyBody}
             </p>
             <button
               type="button"
@@ -166,7 +183,7 @@ export default function ProductCatalog({
               }}
               className="px-4 py-2 text-sm font-medium text-white bg-slate-900 hover:bg-slate-800 rounded-md transition-colors cursor-pointer"
             >
-              Reset Filters
+              {t.catalog.resetFilters}
             </button>
           </div>
         ) : (
@@ -174,6 +191,10 @@ export default function ProductCatalog({
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-7">
             {filteredProducts.map((product) => {
               const isExpanded = Boolean(expandedIds[product.id]);
+              const fr = lang === 'fr' ? PRODUCT_FR[product.id] : null;
+              const categoryText =
+                lang === 'fr' ? CATEGORY_FR[product.category] || product.category : product.category;
+
               return (
                 <article
                   key={product.id}
@@ -187,7 +208,7 @@ export default function ProductCatalog({
                     {/* Clean Unboxed Metadata Line (Zero-Pill Discipline) */}
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-slate-500 mb-2">
                       <span className="text-amber-700 font-semibold">
-                        {product.category}
+                        {categoryText}
                       </span>
                       <span aria-hidden="true">·</span>
                       <span className="font-mono">HS {product.hsCode}</span>
@@ -196,44 +217,44 @@ export default function ProductCatalog({
                     </div>
 
                     <h3 className="font-display text-lg font-bold text-slate-900 leading-snug mb-2">
-                      {product.name}
+                      {fr ? fr.name : product.name}
                     </h3>
 
                     <p className="text-sm text-slate-600 leading-relaxed mb-5">
-                      {product.summary}
+                      {fr ? fr.summary : product.summary}
                     </p>
 
                     {/* Structured Key Specs List */}
                     <dl className="border-t border-slate-200 pt-4 space-y-2.5 text-xs mb-5">
                       <div className="flex justify-between gap-3">
-                        <dt className="text-slate-500 shrink-0">Grade / Purity</dt>
+                        <dt className="text-slate-500 shrink-0">{t.catalog.gradeLabel}</dt>
                         <dd className="font-medium text-slate-900 text-right">
-                          {product.gradeOrPurity}
+                          {fr ? fr.gradeOrPurity : product.gradeOrPurity}
                         </dd>
                       </div>
                       <div className="flex justify-between gap-3">
-                        <dt className="text-slate-500 shrink-0">Assay / Cert Ref</dt>
+                        <dt className="text-slate-500 shrink-0">{t.catalog.assayLabel}</dt>
                         <dd className="font-mono text-slate-800 text-right">
                           {product.assayRef}
                         </dd>
                       </div>
                       <div className="flex justify-between gap-3">
-                        <dt className="text-slate-500 shrink-0">Packaging</dt>
+                        <dt className="text-slate-500 shrink-0">{t.catalog.packagingLabel}</dt>
                         <dd className="text-slate-800 text-right">
-                          {product.packaging}
+                          {fr ? fr.packaging : product.packaging}
                         </dd>
                       </div>
                       <div className="flex justify-between gap-3">
-                        <dt className="text-slate-500 shrink-0">Inspection</dt>
+                        <dt className="text-slate-500 shrink-0">{t.catalog.inspectionLabel}</dt>
                         <dd className="text-emerald-700 font-medium text-right inline-flex items-center justify-end gap-1">
                           <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
                           <span>{product.inspectionStandard}</span>
                         </dd>
                       </div>
                       <div className="flex justify-between gap-3">
-                        <dt className="text-slate-500 shrink-0">Min Order / Lead</dt>
+                        <dt className="text-slate-500 shrink-0">{t.catalog.minOrderLabel}</dt>
                         <dd className="font-mono text-slate-800 text-right tabular-nums">
-                          {product.minOrder}
+                          {fr ? fr.minOrder : product.minOrder}
                         </dd>
                       </div>
                     </dl>
@@ -242,7 +263,7 @@ export default function ProductCatalog({
                     {isExpanded && (
                       <div className="mb-5 p-3.5 bg-slate-50 border border-slate-200 rounded-lg">
                         <div className="text-xs font-semibold text-slate-900 mb-2">
-                          Technical Specification Sheet
+                          {t.catalog.techSheetTitle}
                         </div>
                         <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
                           {product.technicalSpecs.map((spec) => (
@@ -258,14 +279,16 @@ export default function ProductCatalog({
                     )}
 
                     {/* Card Action Bar */}
-                    <div className="mt-auto pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
+                    <div className="mt-auto pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
                       <button
                         type="button"
                         onClick={() => toggleSpecs(product.id)}
                         aria-expanded={isExpanded}
-                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 hover:text-slate-900 py-2 cursor-pointer whitespace-nowrap"
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-slate-700 hover:text-slate-900 py-2 cursor-pointer whitespace-nowrap"
                       >
-                        <span>{isExpanded ? 'Hide Assay Specs' : 'Full Assay Specs'}</span>
+                        <span>
+                          {isExpanded ? t.catalog.hideSpecs : t.catalog.showSpecs}
+                        </span>
                         {isExpanded ? (
                           <ChevronUp className="w-3.5 h-3.5" />
                         ) : (
@@ -273,14 +296,38 @@ export default function ProductCatalog({
                         )}
                       </button>
 
-                      <button
-                        type="button"
-                        onClick={() => onSelectProductForQuote(product.id)}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-amber-500 hover:text-slate-950 rounded-md transition-colors duration-150 cursor-pointer whitespace-nowrap shrink-0"
-                      >
-                        <span>Request Proforma</span>
-                        <ArrowUpRight className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => onAddToManifest(product.id)}
+                          className={`inline-flex items-center gap-1 px-2.5 py-2 text-xs font-semibold rounded-md border transition-colors cursor-pointer whitespace-nowrap ${
+                            manifestProductIds.includes(product.id)
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                          }`}
+                        >
+                          {manifestProductIds.includes(product.id) ? (
+                            <>
+                              <Check className="w-3.5 h-3.5" />
+                              <span>{t.catalog.inManifest}</span>
+                            </>
+                          ) : (
+                            <>
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>{t.catalog.addManifest}</span>
+                            </>
+                          )}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => onSelectProductForQuote(product.id)}
+                          className="inline-flex items-center gap-1 px-3.5 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-amber-500 hover:text-slate-950 rounded-md transition-colors duration-150 cursor-pointer whitespace-nowrap shrink-0"
+                        >
+                          <span>{t.catalog.proformaBtn}</span>
+                          <ArrowUpRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </article>

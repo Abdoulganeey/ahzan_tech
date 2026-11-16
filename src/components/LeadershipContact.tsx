@@ -8,6 +8,7 @@ import {
   MessageSquare,
   UserCheck,
 } from 'lucide-react';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface LeadershipContactProps {
   onOpenDealRoom: () => void;
@@ -16,6 +17,7 @@ interface LeadershipContactProps {
 export default function LeadershipContact({
   onOpenDealRoom,
 }: LeadershipContactProps) {
+  const { t } = useLanguage();
   const [copiedEmail, setCopiedEmail] = useState<string | null>(null);
 
   const handleCopyEmail = async (email: string) => {
@@ -24,7 +26,7 @@ export default function LeadershipContact({
       setCopiedEmail(email);
       setTimeout(() => setCopiedEmail(null), 2000);
     } catch {
-      // Fallback: focus mailto if clipboard API is unavailable
+      // Fallback ignored cleanly
     }
   };
 
@@ -36,13 +38,13 @@ export default function LeadershipContact({
           <div className="lg:col-span-6 space-y-6">
             <div>
               <p className="text-sm font-semibold text-amber-700 mb-2">
-                04. Executive Leadership &amp; Governance
+                {t.leadership.eyebrow}
               </p>
               <h2 className="font-display text-3xl sm:text-4xl font-bold tracking-tight text-slate-900 text-balance mb-4">
-                Accountable Principal Oversight on Every Contract
+                {t.leadership.title}
               </h2>
               <p className="text-base text-slate-600 leading-relaxed">
-                Ahzan Tech Ltd (incorporating AhzanEmporium, RC 2012723) operates with direct executive accountability from initial Letter of Intent through final SGS port release and Bill of Lading handover.
+                {t.leadership.subtitle}
               </p>
             </div>
 
@@ -51,30 +53,34 @@ export default function LeadershipContact({
                 <div>
                   <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 mb-1">
                     <UserCheck className="w-4 h-4" />
-                    <span>Principal Signatory</span>
+                    <span>{t.leadership.signatoryBadge}</span>
                   </div>
                   <h3 className="font-display text-2xl font-bold text-slate-900">
                     Abdulganiyu Hamza
                   </h3>
                   <p className="text-sm font-medium text-slate-600">
-                    Founder &amp; Chief Executive Officer · Ahzan Tech Ltd &amp; AhzanEmporium
+                    {t.leadership.role}
                   </p>
                 </div>
               </div>
 
               <p className="text-sm text-slate-700 leading-relaxed">
-                Overseeing mineral tenure compliance (Licence No. 65197 EL), Nigerian agro-export aggregation, and cross-border wholesale distribution across West Africa, Europe, and East Asia.
+                {t.leadership.bio}
               </p>
 
               <div className="pt-3 border-t border-slate-200 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-slate-600">
                 <div>
-                  <span className="block text-slate-500">Corporate Entity</span>
+                  <span className="block text-slate-500">
+                    {t.leadership.corpEntity}
+                  </span>
                   <span className="font-semibold text-slate-900">
                     Ahzan Tech Ltd (RC 2012723)
                   </span>
                 </div>
                 <div>
-                  <span className="block text-slate-500">Trading Division</span>
+                  <span className="block text-slate-500">
+                    {t.leadership.tradingDiv}
+                  </span>
                   <span className="font-semibold text-slate-900">
                     AhzanEmporium Wholesale &amp; Export
                   </span>
@@ -90,10 +96,10 @@ export default function LeadershipContact({
           >
             <div>
               <h3 className="font-display text-2xl font-bold text-white mb-2">
-                Direct Executive Desk &amp; Trade Channels
+                {t.leadership.deskTitle}
               </h3>
               <p className="text-sm text-slate-300 leading-relaxed">
-                Engage directly with our executive trade desk for Full Corporate Offers (FCO), assay verification dossiers, or wholesale distribution partnerships.
+                {t.leadership.deskSubtitle}
               </p>
             </div>
 
@@ -101,11 +107,11 @@ export default function LeadershipContact({
             <div className="space-y-3">
               {[
                 {
-                  label: 'Executive Office & Mineral Offtake',
+                  label: t.leadership.execEmailLabel,
                   email: 'ceo@ahzan.tech',
                 },
                 {
-                  label: 'International Trade & Wholesale Desk',
+                  label: t.leadership.tradeEmailLabel,
                   email: 'abdoul@ahzantechltd.com',
                 },
               ].map((channel) => (
@@ -133,12 +139,14 @@ export default function LeadershipContact({
                     {copiedEmail === channel.email ? (
                       <>
                         <Check className="w-3.5 h-3.5 text-emerald-400" />
-                        <span className="text-emerald-400">Copied</span>
+                        <span className="text-emerald-400">
+                          {t.leadership.copiedBtn}
+                        </span>
                       </>
                     ) : (
                       <>
                         <Copy className="w-3.5 h-3.5" />
-                        <span>Copy</span>
+                        <span>{t.leadership.copyBtn}</span>
                       </>
                     )}
                   </button>
@@ -151,12 +159,12 @@ export default function LeadershipContact({
               <MapPin className="w-4 h-4 text-amber-400 shrink-0 mt-1" />
               <div className="text-xs space-y-1">
                 <div className="font-semibold text-white text-sm">
-                  Corporate Headquarters &amp; Export Coordination
+                  {t.leadership.hqTitle}
                 </div>
                 <p className="text-slate-300 leading-relaxed">
-                  Abuja &amp; Lagos Trade Corridors, Federal Republic of Nigeria
+                  {t.leadership.hqAddress}
                   <br />
-                  Port Dispatch Terminals: Apapa Wharf · Tin Can Island · Onne Port
+                  {t.leadership.hqPorts}
                 </p>
               </div>
             </div>
@@ -170,7 +178,7 @@ export default function LeadershipContact({
                 className="inline-flex items-center justify-center gap-2 py-3 px-4 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors whitespace-nowrap"
               >
                 <MessageSquare className="w-4 h-4" />
-                <span>WhatsApp Business</span>
+                <span>{t.leadership.whatsappBtn}</span>
               </a>
 
               <button
@@ -178,7 +186,7 @@ export default function LeadershipContact({
                 onClick={onOpenDealRoom}
                 className="inline-flex items-center justify-center gap-2 py-3 px-4 text-sm font-semibold text-slate-950 bg-amber-500 hover:bg-amber-400 rounded-lg transition-colors cursor-pointer whitespace-nowrap"
               >
-                <span>Open B2B Deal Room</span>
+                <span>{t.leadership.dealRoomBtn}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
