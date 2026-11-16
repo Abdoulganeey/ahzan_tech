@@ -38,9 +38,14 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == uid;
     }
 
-    // Verified admin check without DB lookups (safe for list rules)
+    // Verified multi-admin check without DB lookups (safe for list rules)
     function isEmailAdmin() {
-      return isVerifiedUser() && request.auth.token.email == 'abdoulganeey@gmail.com';
+      return isVerifiedUser() &&
+        request.auth.token.email in [
+          'abdoulganeey@gmail.com',
+          'ahzantechltd@gmail.com',
+          'abdoul@ahzantechltd.com'
+        ];
     }
 
     function isAdmin() {
@@ -80,7 +85,14 @@ service cloud.firestore {
         'Bill of Lading',
         'Certificate of Origin',
         'Phytosanitary Certificate',
-        'Form NXP / NESS Clearance'
+        'Form NXP / NESS Clearance',
+        'PRICE_LIST',
+        'LOI',
+        'MOU',
+        'FCO',
+        'PROFORMA_INVOICE',
+        'SALES_CONTRACT',
+        'MANDATE_NCNDA'
       ];
     }
 
@@ -88,7 +100,88 @@ service cloud.firestore {
       return val in ['Verified', 'Pending Countersignature', 'Archived'];
     }
 
-    // Entity blueprint validators
+    function isValidAlertCategory(val) {
+      return val in ['Critical Minerals', 'Agro-Commodities', 'Lubricants'];
+    }
+
+    function isValidAlertDirection(val) {
+      return val in ['below', 'above', 'pct_change'];
+    }
+
+    function isValidAlertChannel(val) {
+      return val in ['email', 'email_whatsapp'];
+    }
+
+    function isValidAlertStatus(val) {
+      return val in ['Active', 'Paused'];
+    }
+
+    function isValidCrmSegment(val) {
+      return val in ['Offtaker', 'Broker', 'Supplier', 'Logistics', 'VIP'];
+    }
+
+    function isValidCrmSource(val) {
+      return val in ['Manual', 'Companion App', 'Website RFQ', 'Price Alert', 'Direct Inquiry'];
+    }
+
+    function isValidCrmLeadStage(val) {
+      return val in [
+        'New Lead',
+        'Qualified',
+        'Proposal / SCO Sent',
+        'Negotiation',
+        'Won / Contracted',
+        'Lost / Archived'
+      ];
+    }
+
+    function isValidCrmPriority(val) {
+      return val in ['High', 'Medium', 'Low'];
+    }
+
+    function isValidCrmEmailDirection(val) {
+      return val in ['Outbound', 'Inbound', 'Draft'];
+    }
+
+    function isValidCrmEmailStatus(val) {
+      return val in ['Sent', 'Received', 'Scheduled', 'Draft'];
+    }
+
+    function isValidLeadCategory(val) {
+      return val in ['LITHIUM', 'AFRICA_SOURCING', 'FUNDING_FINANCE'];
+    }
+
+    function isValidAndroidStage(val) {
+      return val in ['PROSPECT', 'CONTACTED', 'QUALIFIED', 'PROPOSAL_QUOTE', 'NEGOTIATION', 'WON', 'LOST'];
+    }
+
+    function isValidOutreachStatus(val) {
+      return val in [
+        'READY',
+        'WHATSAPP_SENT',
+        'EMAIL_SENT',
+        'LINKEDIN_SENT',
+        'IN_DISCUSSION',
+        'SAMPLE_REQUESTED',
+        'DEAL_IN_PROGRESS',
+        'RISK_PREPAY_ONLY',
+        'PAUSED'
+      ];
+    }
+
+    function isValidPriorityTier(val) {
+      return val in ['A', 'B', 'C'];
+    }
+
+    function isValidActivityType(val) {
+      return val in ['WHATSAPP', 'CALL', 'EMAIL', 'MEETING', 'QUOTE_SENT', 'NOTE', 'STAGE_CHANGE'];
+    }
+
+    function isValidTaskPriority(val) {
+      return val in ['HIGH', 'MEDIUM', 'LOW'];
+    }
+
+    // Entity validators
     function isValidBuyerProfile(data) {
       return data.keys().hasAll([
           'buyerUid',
@@ -117,6 +210,47 @@ service cloud.firestore {
         data.updatedAt is timestamp;
     }
 
+    function isValidAdminBuyerSync(data) {
+      return data.keys().hasAll([
+          'ownerUid',
+          'companyName',
+          'rankId',
+          'normalizedCompanyKey',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'ownerUid',
+          'buyerUid',
+          'rankId',
+          'normalizedCompanyKey',
+          'companyName',
+          'contactName',
+          'email',
+          'defaultPort',
+          'leadCategory',
+          'regionCode',
+          'crmStage',
+          'outreachStatus',
+          'priorityScore',
+          'priorityTier',
+          'targetFobValue',
+          'lastUpdatedMillis',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        isValidId(data.ownerUid) &&
+        data.rankId is number && data.rankId >= 1 && data.rankId <= 999999 &&
+        data.normalizedCompanyKey is string && data.normalizedCompanyKey.size() <= 120 &&
+        data.companyName is string && data.companyName.size() >= 2 && data.companyName.size() <= 160 &&
+        (!data.keys().hasAny(['leadCategory']) || isValidLeadCategory(data.leadCategory)) &&
+        (!data.keys().hasAny(['crmStage']) || isValidAndroidStage(data.crmStage)) &&
+        (!data.keys().hasAny(['outreachStatus']) || isValidOutreachStatus(data.outreachStatus)) &&
+        (!data.keys().hasAny(['priorityTier']) || isValidPriorityTier(data.priorityTier)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
     function isValidBuyerRfq(data) {
       return data.keys().hasAll([
           'buyerUid',
@@ -136,14 +270,20 @@ service cloud.firestore {
         data.keys().hasOnly([
           'buyerUid',
           'refId',
+          'leadRankId',
           'companyName',
           'contactName',
           'corporateEmail',
           'destinationPort',
           'commoditySummary',
+          'productDescription',
           'targetVolume',
+          'quantityMt',
+          'unitPriceUsd',
+          'totalValueUsd',
           'incoterm',
           'paymentTerms',
+          'validityDays',
           'specifications',
           'status',
           'estimatedValueUsd',
@@ -153,12 +293,18 @@ service cloud.firestore {
         isValidId(data.buyerUid) &&
         isValidId(data.refId) &&
         data.refId.size() >= 4 && data.refId.size() <= 40 &&
+        (!data.keys().hasAny(['leadRankId']) || (data.leadRankId is number && data.leadRankId >= 0)) &&
         data.companyName is string && data.companyName.size() >= 2 && data.companyName.size() <= 160 &&
         data.contactName is string && data.contactName.size() >= 2 && data.contactName.size() <= 120 &&
         isValidEmailFormat(data.corporateEmail) &&
         data.destinationPort is string && data.destinationPort.size() >= 2 && data.destinationPort.size() <= 120 &&
         data.commoditySummary is string && data.commoditySummary.size() >= 2 && data.commoditySummary.size() <= 300 &&
+        (!data.keys().hasAny(['productDescription']) || (data.productDescription is string && data.productDescription.size() <= 400)) &&
         data.targetVolume is string && data.targetVolume.size() >= 1 && data.targetVolume.size() <= 120 &&
+        (!data.keys().hasAny(['quantityMt']) || (data.quantityMt is number && data.quantityMt >= 0)) &&
+        (!data.keys().hasAny(['unitPriceUsd']) || (data.unitPriceUsd is number && data.unitPriceUsd >= 0)) &&
+        (!data.keys().hasAny(['totalValueUsd']) || (data.totalValueUsd is number && data.totalValueUsd >= 0)) &&
+        (!data.keys().hasAny(['validityDays']) || (data.validityDays is number && data.validityDays >= 1 && data.validityDays <= 365)) &&
         isValidIncoterm(data.incoterm) &&
         data.paymentTerms is string && data.paymentTerms.size() >= 2 && data.paymentTerms.size() <= 120 &&
         (!data.keys().hasAny(['specifications']) || (data.specifications is string && data.specifications.size() <= 1000)) &&
@@ -190,12 +336,16 @@ service cloud.firestore {
           'buyerUid',
           'trackingCode',
           'rfqRefId',
+          'leadRankId',
+          'companyName',
           'commodity',
           'originPort',
           'destinationPort',
           'vesselName',
+          'vesselOrContainerRef',
           'billOfLadingNo',
           'containerAllocation',
+          'sgsInspectionStatus',
           'stageIndex',
           'status',
           'etaDate',
@@ -208,12 +358,16 @@ service cloud.firestore {
         data.trackingCode.size() >= 4 && data.trackingCode.size() <= 48 &&
         isValidId(data.rfqRefId) &&
         data.rfqRefId.size() >= 4 && data.rfqRefId.size() <= 40 &&
+        (!data.keys().hasAny(['leadRankId']) || (data.leadRankId is number && data.leadRankId >= 0)) &&
+        (!data.keys().hasAny(['companyName']) || (data.companyName is string && data.companyName.size() <= 160)) &&
         data.commodity is string && data.commodity.size() >= 2 && data.commodity.size() <= 180 &&
         data.originPort is string && data.originPort.size() >= 2 && data.originPort.size() <= 120 &&
         data.destinationPort is string && data.destinationPort.size() >= 2 && data.destinationPort.size() <= 120 &&
         data.vesselName is string && data.vesselName.size() >= 2 && data.vesselName.size() <= 120 &&
+        (!data.keys().hasAny(['vesselOrContainerRef']) || (data.vesselOrContainerRef is string && data.vesselOrContainerRef.size() <= 120)) &&
         data.billOfLadingNo is string && data.billOfLadingNo.size() >= 2 && data.billOfLadingNo.size() <= 80 &&
         data.containerAllocation is string && data.containerAllocation.size() >= 2 && data.containerAllocation.size() <= 80 &&
+        (!data.keys().hasAny(['sgsInspectionStatus']) || (data.sgsInspectionStatus is string && data.sgsInspectionStatus.size() <= 80)) &&
         data.stageIndex is number && data.stageIndex >= 1 && data.stageIndex <= 5 &&
         isValidShipmentStatus(data.status) &&
         data.etaDate is string && data.etaDate.size() >= 4 && data.etaDate.size() <= 40 &&
@@ -240,13 +394,19 @@ service cloud.firestore {
         data.keys().hasOnly([
           'buyerUid',
           'docCode',
+          'referenceNo',
           'title',
           'docType',
           'rfqRefId',
+          'leadRankId',
+          'counterpartyCompany',
           'commodity',
           'issuer',
           'issuedDate',
           'status',
+          'incoterm',
+          'totalValue',
+          'createdAtMillis',
           'summaryText',
           'createdAt',
           'updatedAt'
@@ -254,32 +414,443 @@ service cloud.firestore {
         isValidId(data.buyerUid) &&
         isValidId(data.docCode) &&
         data.docCode.size() >= 4 && data.docCode.size() <= 48 &&
+        (!data.keys().hasAny(['referenceNo']) || (data.referenceNo is string && data.referenceNo.size() <= 64)) &&
         data.title is string && data.title.size() >= 3 && data.title.size() <= 180 &&
         isValidDocType(data.docType) &&
         isValidId(data.rfqRefId) &&
         data.rfqRefId.size() >= 4 && data.rfqRefId.size() <= 40 &&
+        (!data.keys().hasAny(['leadRankId']) || (data.leadRankId is number && data.leadRankId >= 0)) &&
+        (!data.keys().hasAny(['counterpartyCompany']) || (data.counterpartyCompany is string && data.counterpartyCompany.size() <= 160)) &&
         data.commodity is string && data.commodity.size() >= 2 && data.commodity.size() <= 160 &&
         data.issuer is string && data.issuer.size() >= 2 && data.issuer.size() <= 120 &&
         data.issuedDate is string && data.issuedDate.size() >= 4 && data.issuedDate.size() <= 40 &&
         isValidDocStatus(data.status) &&
+        (!data.keys().hasAny(['incoterm']) || isValidIncoterm(data.incoterm)) &&
+        (!data.keys().hasAny(['totalValue']) || (data.totalValue is number && data.totalValue >= 0)) &&
+        (!data.keys().hasAny(['createdAtMillis']) || data.createdAtMillis is number) &&
         data.summaryText is string && data.summaryText.size() >= 4 && data.summaryText.size() <= 1500 &&
         data.createdAt is timestamp &&
         data.updatedAt is timestamp;
     }
 
-    // 1. Private Buyer Profiles (/buyers/{buyerId})
+    function isValidPriceAlert(data) {
+      return data.keys().hasAll([
+          'buyerUid',
+          'email',
+          'commodityKey',
+          'commodityLabel',
+          'category',
+          'baselinePrice',
+          'unitLabel',
+          'triggerDirection',
+          'thresholdValue',
+          'channel',
+          'status',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'buyerUid',
+          'email',
+          'commodityKey',
+          'commodityLabel',
+          'category',
+          'baselinePrice',
+          'unitLabel',
+          'triggerDirection',
+          'thresholdValue',
+          'channel',
+          'status',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        isValidId(data.buyerUid) &&
+        isValidEmailFormat(data.email) &&
+        isValidId(data.commodityKey) &&
+        data.commodityKey.size() >= 2 && data.commodityKey.size() <= 64 &&
+        data.commodityLabel is string && data.commodityLabel.size() >= 2 && data.commodityLabel.size() <= 160 &&
+        isValidAlertCategory(data.category) &&
+        data.baselinePrice is number && data.baselinePrice >= 0 && data.baselinePrice <= 1000000 &&
+        data.unitLabel is string && data.unitLabel.size() >= 1 && data.unitLabel.size() <= 32 &&
+        isValidAlertDirection(data.triggerDirection) &&
+        data.thresholdValue is number && data.thresholdValue > 0 && data.thresholdValue <= 1000000 &&
+        isValidAlertChannel(data.channel) &&
+        isValidAlertStatus(data.status) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidMarketConfig(data) {
+      return data.keys().hasAll([
+          'lithiumRatePerPercentUsd',
+          'lithiumAssayPct',
+          'agroIssueDate',
+          'lubricantIssueDate',
+          'quoteValidityDays',
+          'fxNgnPerUsd',
+          'fxXofPerUsd',
+          'adminNotice',
+          'updatedByUid',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'lithiumRatePerPercentUsd',
+          'lithiumAssayPct',
+          'agroIssueDate',
+          'lubricantIssueDate',
+          'quoteValidityDays',
+          'fxNgnPerUsd',
+          'fxXofPerUsd',
+          'adminNotice',
+          'companyName',
+          'domain',
+          'ceoName',
+          'ceoEmail',
+          'primaryMineralAsset',
+          'miningCadastreId',
+          'miningLocation',
+          'assayRefPrimary',
+          'assayRefSecondary',
+          'activeSupplyCorridors',
+          'multiCommodityCapabilities',
+          'bankReadinessDocs',
+          'updatedByUid',
+          'updatedAt'
+        ]) &&
+        data.lithiumRatePerPercentUsd is number && data.lithiumRatePerPercentUsd >= 1 && data.lithiumRatePerPercentUsd <= 100000 &&
+        data.lithiumAssayPct is number && data.lithiumAssayPct >= 0.1 && data.lithiumAssayPct <= 100 &&
+        data.agroIssueDate is string && data.agroIssueDate.size() >= 4 && data.agroIssueDate.size() <= 40 &&
+        data.lubricantIssueDate is string && data.lubricantIssueDate.size() >= 4 && data.lubricantIssueDate.size() <= 40 &&
+        data.quoteValidityDays is number && data.quoteValidityDays >= 1 && data.quoteValidityDays <= 365 &&
+        data.fxNgnPerUsd is number && data.fxNgnPerUsd >= 1 && data.fxNgnPerUsd <= 1000000 &&
+        data.fxXofPerUsd is number && data.fxXofPerUsd >= 1 && data.fxXofPerUsd <= 1000000 &&
+        data.adminNotice is string && data.adminNotice.size() <= 320 &&
+        (!data.keys().hasAny(['companyName']) || (data.companyName is string && data.companyName.size() <= 120)) &&
+        (!data.keys().hasAny(['domain']) || (data.domain is string && data.domain.size() <= 120)) &&
+        (!data.keys().hasAny(['ceoName']) || (data.ceoName is string && data.ceoName.size() <= 120)) &&
+        (!data.keys().hasAny(['ceoEmail']) || (data.ceoEmail is string && data.ceoEmail.size() <= 160)) &&
+        (!data.keys().hasAny(['primaryMineralAsset']) || (data.primaryMineralAsset is string && data.primaryMineralAsset.size() <= 200)) &&
+        (!data.keys().hasAny(['miningCadastreId']) || (data.miningCadastreId is string && data.miningCadastreId.size() <= 80)) &&
+        (!data.keys().hasAny(['miningLocation']) || (data.miningLocation is string && data.miningLocation.size() <= 160)) &&
+        (!data.keys().hasAny(['assayRefPrimary']) || (data.assayRefPrimary is string && data.assayRefPrimary.size() <= 160)) &&
+        (!data.keys().hasAny(['assayRefSecondary']) || (data.assayRefSecondary is string && data.assayRefSecondary.size() <= 160)) &&
+        (!data.keys().hasAny(['activeSupplyCorridors']) || (data.activeSupplyCorridors is string && data.activeSupplyCorridors.size() <= 400)) &&
+        (!data.keys().hasAny(['multiCommodityCapabilities']) || (data.multiCommodityCapabilities is string && data.multiCommodityCapabilities.size() <= 400)) &&
+        (!data.keys().hasAny(['bankReadinessDocs']) || data.bankReadinessDocs is map) &&
+        isValidId(data.updatedByUid) &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidCrmContact(data) {
+      return data.keys().hasAll([
+          'ownerUid',
+          'fullName',
+          'companyName',
+          'roleTitle',
+          'email',
+          'phoneWhatsapp',
+          'countryPort',
+          'segment',
+          'tagsSummary',
+          'notes',
+          'source',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'ownerUid',
+          'leadRankId',
+          'normalizedCompanyKey',
+          'fullName',
+          'companyName',
+          'roleTitle',
+          'email',
+          'directEmail',
+          'phoneWhatsapp',
+          'countryPort',
+          'websiteUrl',
+          'segment',
+          'tagsSummary',
+          'notes',
+          'source',
+          'lastUpdatedMillis',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        isValidId(data.ownerUid) &&
+        (!data.keys().hasAny(['leadRankId']) || (data.leadRankId is number && data.leadRankId >= 0)) &&
+        (!data.keys().hasAny(['normalizedCompanyKey']) || (data.normalizedCompanyKey is string && data.normalizedCompanyKey.size() <= 120)) &&
+        data.fullName is string && data.fullName.size() >= 2 && data.fullName.size() <= 120 &&
+        data.companyName is string && data.companyName.size() >= 2 && data.companyName.size() <= 160 &&
+        data.roleTitle is string && data.roleTitle.size() <= 120 &&
+        isValidEmailFormat(data.email) &&
+        (!data.keys().hasAny(['directEmail']) || (data.directEmail is string && data.directEmail.size() <= 160)) &&
+        data.phoneWhatsapp is string && data.phoneWhatsapp.size() <= 60 &&
+        data.countryPort is string && data.countryPort.size() <= 120 &&
+        (!data.keys().hasAny(['websiteUrl']) || (data.websiteUrl is string && data.websiteUrl.size() <= 240)) &&
+        isValidCrmSegment(data.segment) &&
+        data.tagsSummary is string && data.tagsSummary.size() <= 240 &&
+        data.notes is string && data.notes.size() <= 1500 &&
+        isValidCrmSource(data.source) &&
+        (!data.keys().hasAny(['lastUpdatedMillis']) || data.lastUpdatedMillis is number) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidCrmLead(data) {
+      return data.keys().hasAll([
+          'ownerUid',
+          'title',
+          'contactId',
+          'contactName',
+          'companyName',
+          'email',
+          'phoneWhatsapp',
+          'commodityInterest',
+          'stage',
+          'priority',
+          'dealValueUsd',
+          'followUpDate',
+          'source',
+          'notes',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'ownerUid',
+          'rankId',
+          'normalizedCompanyKey',
+          'leadCategory',
+          'regionCode',
+          'location',
+          'primaryRole',
+          'priorityScore',
+          'priorityTier',
+          'fitScore',
+          'procScore',
+          'finScore',
+          'dmScore',
+          'esgScore',
+          'volScore',
+          'decisionMaker',
+          'title',
+          'contactId',
+          'contactName',
+          'companyName',
+          'email',
+          'generalEmail',
+          'directEmail',
+          'emailRouteNote',
+          'phoneWhatsapp',
+          'whatsappNumber',
+          'websiteUrl',
+          'websiteDisplay',
+          'profileSource',
+          'operationalFit',
+          'emailSubject',
+          'emailBody',
+          'linkedInNote',
+          'commodityInterest',
+          'outreachStatus',
+          'crmStage',
+          'winProbability',
+          'estimatedTonnage',
+          'targetFobValue',
+          'impliedFobPricePerMt',
+          'weightedValueUsd',
+          'followUpAtMillis',
+          'nextAction',
+          'tags',
+          'lostReason',
+          'isRiskWatch',
+          'isCustomLead',
+          'leadSource',
+          'lastUpdatedMillis',
+          'stage',
+          'priority',
+          'dealValueUsd',
+          'followUpDate',
+          'source',
+          'notes',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        isValidId(data.ownerUid) &&
+        (!data.keys().hasAny(['rankId']) || (data.rankId is number && data.rankId >= 1 && data.rankId <= 999999)) &&
+        (!data.keys().hasAny(['normalizedCompanyKey']) || (data.normalizedCompanyKey is string && data.normalizedCompanyKey.size() <= 120)) &&
+        (!data.keys().hasAny(['leadCategory']) || isValidLeadCategory(data.leadCategory)) &&
+        (!data.keys().hasAny(['regionCode']) || (data.regionCode is string && data.regionCode.size() <= 64)) &&
+        (!data.keys().hasAny(['location']) || (data.location is string && data.location.size() <= 160)) &&
+        (!data.keys().hasAny(['primaryRole']) || (data.primaryRole is string && data.primaryRole.size() <= 160)) &&
+        (!data.keys().hasAny(['priorityScore']) || (data.priorityScore is number && data.priorityScore >= 0 && data.priorityScore <= 100)) &&
+        (!data.keys().hasAny(['priorityTier']) || isValidPriorityTier(data.priorityTier)) &&
+        (!data.keys().hasAny(['fitScore']) || (data.fitScore is number && data.fitScore >= 0 && data.fitScore <= 25)) &&
+        (!data.keys().hasAny(['procScore']) || (data.procScore is number && data.procScore >= 0 && data.procScore <= 25)) &&
+        (!data.keys().hasAny(['finScore']) || (data.finScore is number && data.finScore >= 0 && data.finScore <= 15)) &&
+        (!data.keys().hasAny(['dmScore']) || (data.dmScore is number && data.dmScore >= 0 && data.dmScore <= 15)) &&
+        (!data.keys().hasAny(['esgScore']) || (data.esgScore is number && data.esgScore >= 0 && data.esgScore <= 10)) &&
+        (!data.keys().hasAny(['volScore']) || (data.volScore is number && data.volScore >= 0 && data.volScore <= 10)) &&
+        (!data.keys().hasAny(['decisionMaker']) || (data.decisionMaker is string && data.decisionMaker.size() <= 120)) &&
+        data.title is string && data.title.size() >= 2 && data.title.size() <= 180 &&
+        data.contactId is string && data.contactId.size() <= 128 &&
+        data.contactName is string && data.contactName.size() >= 2 && data.contactName.size() <= 120 &&
+        data.companyName is string && data.companyName.size() >= 2 && data.companyName.size() <= 160 &&
+        isValidEmailFormat(data.email) &&
+        (!data.keys().hasAny(['generalEmail']) || (data.generalEmail is string && data.generalEmail.size() <= 160)) &&
+        (!data.keys().hasAny(['directEmail']) || (data.directEmail is string && data.directEmail.size() <= 160)) &&
+        (!data.keys().hasAny(['emailRouteNote']) || (data.emailRouteNote is string && data.emailRouteNote.size() <= 200)) &&
+        data.phoneWhatsapp is string && data.phoneWhatsapp.size() <= 60 &&
+        (!data.keys().hasAny(['whatsappNumber']) || (data.whatsappNumber is string && data.whatsappNumber.size() <= 60)) &&
+        (!data.keys().hasAny(['websiteUrl']) || (data.websiteUrl is string && data.websiteUrl.size() <= 240)) &&
+        (!data.keys().hasAny(['websiteDisplay']) || (data.websiteDisplay is string && data.websiteDisplay.size() <= 160)) &&
+        (!data.keys().hasAny(['profileSource']) || (data.profileSource is string && data.profileSource.size() <= 120)) &&
+        (!data.keys().hasAny(['operationalFit']) || (data.operationalFit is string && data.operationalFit.size() <= 1000)) &&
+        (!data.keys().hasAny(['emailSubject']) || (data.emailSubject is string && data.emailSubject.size() <= 240)) &&
+        (!data.keys().hasAny(['emailBody']) || (data.emailBody is string && data.emailBody.size() <= 4000)) &&
+        (!data.keys().hasAny(['linkedInNote']) || (data.linkedInNote is string && data.linkedInNote.size() <= 500)) &&
+        data.commodityInterest is string && data.commodityInterest.size() >= 2 && data.commodityInterest.size() <= 200 &&
+        (!data.keys().hasAny(['outreachStatus']) || isValidOutreachStatus(data.outreachStatus)) &&
+        (!data.keys().hasAny(['crmStage']) || isValidAndroidStage(data.crmStage)) &&
+        (!data.keys().hasAny(['winProbability']) || (data.winProbability is number && data.winProbability >= 0 && data.winProbability <= 100)) &&
+        (!data.keys().hasAny(['estimatedTonnage']) || (data.estimatedTonnage is number && data.estimatedTonnage >= 0)) &&
+        (!data.keys().hasAny(['targetFobValue']) || (data.targetFobValue is number && data.targetFobValue >= 0)) &&
+        (!data.keys().hasAny(['impliedFobPricePerMt']) || (data.impliedFobPricePerMt is number && data.impliedFobPricePerMt >= 0)) &&
+        (!data.keys().hasAny(['weightedValueUsd']) || (data.weightedValueUsd is number && data.weightedValueUsd >= 0)) &&
+        (!data.keys().hasAny(['followUpAtMillis']) || data.followUpAtMillis is number) &&
+        (!data.keys().hasAny(['nextAction']) || (data.nextAction is string && data.nextAction.size() <= 240)) &&
+        (!data.keys().hasAny(['tags']) || (data.tags is string && data.tags.size() <= 300)) &&
+        (!data.keys().hasAny(['lostReason']) || (data.lostReason is string && data.lostReason.size() <= 300)) &&
+        (!data.keys().hasAny(['isRiskWatch']) || data.isRiskWatch is bool) &&
+        (!data.keys().hasAny(['isCustomLead']) || data.isCustomLead is bool) &&
+        (!data.keys().hasAny(['leadSource']) || (data.leadSource is string && data.leadSource.size() <= 120)) &&
+        (!data.keys().hasAny(['lastUpdatedMillis']) || data.lastUpdatedMillis is number) &&
+        isValidCrmLeadStage(data.stage) &&
+        isValidCrmPriority(data.priority) &&
+        data.dealValueUsd is number && data.dealValueUsd >= 0 && data.dealValueUsd <= 1000000000 &&
+        data.followUpDate is string && data.followUpDate.size() <= 40 &&
+        isValidCrmSource(data.source) &&
+        data.notes is string && data.notes.size() <= 1500 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidCrmEmail(data) {
+      return data.keys().hasAll([
+          'ownerUid',
+          'direction',
+          'toEmail',
+          'fromEmail',
+          'contactName',
+          'companyName',
+          'leadId',
+          'subject',
+          'body',
+          'status',
+          'sentDate',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'ownerUid',
+          'leadRankId',
+          'activityType',
+          'outcome',
+          'summary',
+          'quoteAmountUsd',
+          'createdAtMillis',
+          'direction',
+          'toEmail',
+          'fromEmail',
+          'contactName',
+          'companyName',
+          'leadId',
+          'subject',
+          'body',
+          'status',
+          'sentDate',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        isValidId(data.ownerUid) &&
+        (!data.keys().hasAny(['leadRankId']) || (data.leadRankId is number && data.leadRankId >= 0)) &&
+        (!data.keys().hasAny(['activityType']) || isValidActivityType(data.activityType)) &&
+        (!data.keys().hasAny(['outcome']) || (data.outcome is string && data.outcome.size() <= 200)) &&
+        (!data.keys().hasAny(['summary']) || (data.summary is string && data.summary.size() <= 1500)) &&
+        (!data.keys().hasAny(['quoteAmountUsd']) || (data.quoteAmountUsd is number && data.quoteAmountUsd >= 0)) &&
+        (!data.keys().hasAny(['createdAtMillis']) || data.createdAtMillis is number) &&
+        isValidCrmEmailDirection(data.direction) &&
+        isValidEmailFormat(data.toEmail) &&
+        isValidEmailFormat(data.fromEmail) &&
+        data.contactName is string && data.contactName.size() >= 1 && data.contactName.size() <= 120 &&
+        data.companyName is string && data.companyName.size() <= 160 &&
+        data.leadId is string && data.leadId.size() <= 128 &&
+        data.subject is string && data.subject.size() >= 2 && data.subject.size() <= 200 &&
+        data.body is string && data.body.size() >= 2 && data.body.size() <= 5000 &&
+        isValidCrmEmailStatus(data.status) &&
+        data.sentDate is string && data.sentDate.size() >= 4 && data.sentDate.size() <= 40 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidCrmTask(data) {
+      return data.keys().hasAll([
+          'ownerUid',
+          'leadRankId',
+          'companyName',
+          'title',
+          'priority',
+          'dueAtMillis',
+          'isCompleted',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'ownerUid',
+          'leadRankId',
+          'companyName',
+          'title',
+          'priority',
+          'dueAtMillis',
+          'isCompleted',
+          'completedAtMillis',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        isValidId(data.ownerUid) &&
+        data.leadRankId is number && data.leadRankId >= 0 &&
+        data.companyName is string && data.companyName.size() >= 1 && data.companyName.size() <= 160 &&
+        data.title is string && data.title.size() >= 2 && data.title.size() <= 240 &&
+        isValidTaskPriority(data.priority) &&
+        data.dueAtMillis is number && data.dueAtMillis >= 0 &&
+        data.isCompleted is bool &&
+        (!data.keys().hasAny(['completedAtMillis']) || data.completedAtMillis is number) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // 1. Private Buyer Profiles & Admin Synced Buyer Records (/buyers/{buyerId})
     match /buyers/{buyerId} {
       allow get: if isValidId(buyerId) && (isOwner(buyerId) || isAdmin());
-      allow list: if false;
-      allow create: if isVerifiedUser() &&
+      allow list: if isEmailAdmin();
+      allow create: if (
+        isVerifiedUser() &&
         isValidId(buyerId) &&
         isValidBuyerProfile(incoming()) &&
         buyerId == request.auth.uid &&
         incoming().buyerUid == request.auth.uid &&
         incoming().email == request.auth.token.email &&
         incoming().createdAt == request.time &&
-        incoming().updatedAt == request.time;
-      allow update: if isVerifiedUser() &&
+        incoming().updatedAt == request.time
+      ) || (
+        isAdmin() &&
+        isValidId(buyerId) &&
+        isValidAdminBuyerSync(incoming()) &&
+        incoming().ownerUid == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time
+      );
+      allow update: if (
+        isVerifiedUser() &&
         isValidId(buyerId) &&
         isValidBuyerProfile(incoming()) &&
         (isOwner(buyerId) || isAdmin()) &&
@@ -287,8 +858,16 @@ service cloud.firestore {
         incoming().email == existing().email &&
         incoming().createdAt == existing().createdAt &&
         incoming().updatedAt == request.time &&
-        incoming().diff(existing()).affectedKeys().hasOnly(['companyName', 'contactName', 'defaultPort', 'updatedAt']);
-      allow delete: if false;
+        incoming().diff(existing()).affectedKeys().hasOnly(['companyName', 'contactName', 'defaultPort', 'updatedAt'])
+      ) || (
+        isAdmin() &&
+        isValidId(buyerId) &&
+        isValidAdminBuyerSync(incoming()) &&
+        incoming().ownerUid == existing().ownerUid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time
+      );
+      allow delete: if isAdmin() && isValidId(buyerId);
     }
 
     // 2. Buyer RFQs (/rfqs/{rfqId})
@@ -298,7 +877,7 @@ service cloud.firestore {
       allow create: if isVerifiedUser() &&
         isValidId(rfqId) &&
         isValidBuyerRfq(incoming()) &&
-        incoming().buyerUid == request.auth.uid &&
+        (incoming().buyerUid == request.auth.uid || isAdmin()) &&
         incoming().createdAt == request.time &&
         incoming().updatedAt == request.time;
       allow update: if isVerifiedUser() &&
@@ -311,7 +890,22 @@ service cloud.firestore {
         (
           (
             isAdmin() &&
-            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'destinationPort', 'targetVolume', 'specifications', 'updatedAt'])
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'status',
+              'destinationPort',
+              'targetVolume',
+              'specifications',
+              'estimatedValueUsd',
+              'leadRankId',
+              'productDescription',
+              'quantityMt',
+              'unitPriceUsd',
+              'totalValueUsd',
+              'incoterm',
+              'paymentTerms',
+              'validityDays',
+              'updatedAt'
+            ])
           ) ||
           (
             isOwner(existing().buyerUid) &&
@@ -344,7 +938,20 @@ service cloud.firestore {
         (
           (
             isAdmin() &&
-            incoming().diff(existing()).affectedKeys().hasOnly(['stageIndex', 'status', 'etaDate', 'vesselName', 'billOfLadingNo', 'lastUpdateNote', 'updatedAt'])
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'stageIndex',
+              'status',
+              'etaDate',
+              'vesselName',
+              'vesselOrContainerRef',
+              'billOfLadingNo',
+              'containerAllocation',
+              'sgsInspectionStatus',
+              'leadRankId',
+              'companyName',
+              'lastUpdateNote',
+              'updatedAt'
+            ])
           ) ||
           (
             isOwner(existing().buyerUid) &&
@@ -380,7 +987,15 @@ service cloud.firestore {
         (
           (
             isAdmin() &&
-            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'summaryText', 'updatedAt'])
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'status',
+              'summaryText',
+              'totalValue',
+              'incoterm',
+              'counterpartyCompany',
+              'leadRankId',
+              'updatedAt'
+            ])
           ) ||
           (
             isOwner(existing().buyerUid) &&
@@ -390,6 +1005,224 @@ service cloud.firestore {
           )
         );
       allow delete: if isAdmin() && isValidId(docId);
+    }
+
+    // 5. Commodity Price Alert Subscriptions (/priceAlerts/{alertId})
+    match /priceAlerts/{alertId} {
+      allow get: if isValidId(alertId) && (isOwner(existing().buyerUid) || isAdmin());
+      allow list: if isSignedIn() && (existing().buyerUid == request.auth.uid || isEmailAdmin());
+      allow create: if isVerifiedUser() &&
+        isValidId(alertId) &&
+        isValidPriceAlert(incoming()) &&
+        incoming().buyerUid == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() &&
+        isValidId(alertId) &&
+        isValidPriceAlert(incoming()) &&
+        (isOwner(existing().buyerUid) || isAdmin()) &&
+        incoming().buyerUid == existing().buyerUid &&
+        incoming().commodityKey == existing().commodityKey &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'status',
+          'triggerDirection',
+          'thresholdValue',
+          'channel',
+          'email',
+          'updatedAt'
+        ]);
+      allow delete: if isVerifiedUser() &&
+        isValidId(alertId) &&
+        (isOwner(existing().buyerUid) || isAdmin());
+    }
+
+    // 6. Synchronized Market Rates & Canonical Identity (/siteConfig/{configId})
+    match /siteConfig/{configId} {
+      allow get: if isValidId(configId);
+      allow list: if false;
+      allow create, update: if isAdmin() &&
+        isValidId(configId) &&
+        isValidMarketConfig(incoming()) &&
+        incoming().updatedByUid == request.auth.uid &&
+        incoming().updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    // 7. Executive CRM Contacts Directory (/crmContacts/{contactId})
+    match /crmContacts/{contactId} {
+      allow get: if isValidId(contactId) && isAdmin();
+      allow list: if isEmailAdmin();
+      allow create: if isAdmin() &&
+        isValidId(contactId) &&
+        isValidCrmContact(incoming()) &&
+        incoming().ownerUid == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isAdmin() &&
+        isValidId(contactId) &&
+        isValidCrmContact(incoming()) &&
+        incoming().ownerUid == existing().ownerUid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'leadRankId',
+          'normalizedCompanyKey',
+          'fullName',
+          'companyName',
+          'roleTitle',
+          'email',
+          'directEmail',
+          'phoneWhatsapp',
+          'countryPort',
+          'websiteUrl',
+          'segment',
+          'tagsSummary',
+          'notes',
+          'lastUpdatedMillis',
+          'updatedAt'
+        ]);
+      allow delete: if isAdmin() && isValidId(contactId);
+    }
+
+    // 8. Executive CRM & Lithium Intel Trade Book Leads (/crmLeads/{leadId})
+    match /crmLeads/{leadId} {
+      allow get: if isValidId(leadId) && isAdmin();
+      allow list: if isEmailAdmin();
+      allow create: if isAdmin() &&
+        isValidId(leadId) &&
+        isValidCrmLead(incoming()) &&
+        incoming().ownerUid == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isAdmin() &&
+        isValidId(leadId) &&
+        isValidCrmLead(incoming()) &&
+        incoming().ownerUid == existing().ownerUid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'rankId',
+          'normalizedCompanyKey',
+          'leadCategory',
+          'regionCode',
+          'location',
+          'primaryRole',
+          'priorityScore',
+          'priorityTier',
+          'fitScore',
+          'procScore',
+          'finScore',
+          'dmScore',
+          'esgScore',
+          'volScore',
+          'decisionMaker',
+          'title',
+          'contactId',
+          'contactName',
+          'companyName',
+          'email',
+          'generalEmail',
+          'directEmail',
+          'emailRouteNote',
+          'phoneWhatsapp',
+          'whatsappNumber',
+          'websiteUrl',
+          'websiteDisplay',
+          'profileSource',
+          'operationalFit',
+          'emailSubject',
+          'emailBody',
+          'linkedInNote',
+          'commodityInterest',
+          'outreachStatus',
+          'crmStage',
+          'winProbability',
+          'estimatedTonnage',
+          'targetFobValue',
+          'impliedFobPricePerMt',
+          'weightedValueUsd',
+          'followUpAtMillis',
+          'nextAction',
+          'tags',
+          'lostReason',
+          'isRiskWatch',
+          'isCustomLead',
+          'leadSource',
+          'lastUpdatedMillis',
+          'stage',
+          'priority',
+          'dealValueUsd',
+          'followUpDate',
+          'notes',
+          'updatedAt'
+        ]);
+      allow delete: if isAdmin() && isValidId(leadId);
+    }
+
+    // 9. Executive CRM Emails & Activity Timeline (/crmEmails/{emailId})
+    match /crmEmails/{emailId} {
+      allow get: if isValidId(emailId) && isAdmin();
+      allow list: if isEmailAdmin();
+      allow create: if isAdmin() &&
+        isValidId(emailId) &&
+        isValidCrmEmail(incoming()) &&
+        incoming().ownerUid == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isAdmin() &&
+        isValidId(emailId) &&
+        isValidCrmEmail(incoming()) &&
+        incoming().ownerUid == existing().ownerUid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'leadRankId',
+          'activityType',
+          'outcome',
+          'summary',
+          'quoteAmountUsd',
+          'createdAtMillis',
+          'direction',
+          'toEmail',
+          'contactName',
+          'companyName',
+          'leadId',
+          'subject',
+          'body',
+          'status',
+          'sentDate',
+          'updatedAt'
+        ]);
+      allow delete: if isAdmin() && isValidId(emailId);
+    }
+
+    // 10. Executive CRM Follow-Up Tasks (/crmTasks/{taskId})
+    match /crmTasks/{taskId} {
+      allow get: if isValidId(taskId) && isAdmin();
+      allow list: if isEmailAdmin();
+      allow create: if isAdmin() &&
+        isValidId(taskId) &&
+        isValidCrmTask(incoming()) &&
+        incoming().ownerUid == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isAdmin() &&
+        isValidId(taskId) &&
+        isValidCrmTask(incoming()) &&
+        incoming().ownerUid == existing().ownerUid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'title',
+          'priority',
+          'dueAtMillis',
+          'isCompleted',
+          'completedAtMillis',
+          'updatedAt'
+        ]);
+      allow delete: if isAdmin() && isValidId(taskId);
     }
   }
 }

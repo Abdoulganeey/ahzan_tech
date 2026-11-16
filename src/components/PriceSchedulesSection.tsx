@@ -1,17 +1,21 @@
 import { useMemo, useState } from 'react';
 import {
+  Bell,
   Check,
   Download,
+  FileDown,
   FileSpreadsheet,
+  Loader2,
   Plus,
 } from 'lucide-react';
 import {
   AGRO_PRICE_LIST_2026,
-  LITHIUM_ASSAY_GRADE_PCT,
-  LITHIUM_RATE_PER_PERCENT_USD,
   LUBRICANT_PRICE_LIST_2026,
 } from '../data/priceLists';
+import { useBuyerAuth } from '../context/BuyerAuthContext';
 import { useLanguage } from '../i18n/LanguageContext';
+import { exportSchedulePdf } from '../utils/pdfQuoteGenerator';
+import PriceAlertSubscription from './PriceAlertSubscription';
 
 export interface CustomScheduleItem {
   productId: string;
@@ -25,7 +29,6 @@ interface PriceSchedulesSectionProps {
   manifestProductIds?: string[];
 }
 
-const LITHIUM_TIERS = [3.5, 4.0, 4.5, LITHIUM_ASSAY_GRADE_PCT, 5.0, 5.5];
 const LUBRICANT_GRADES = [
   'All',
   'SL 5W-30',
@@ -41,9 +44,21 @@ export default function PriceSchedulesSection({
   manifestProductIds = [],
 }: PriceSchedulesSectionProps) {
   const { lang } = useLanguage();
+  const { marketConfig } = useBuyerAuth();
   const [activeTab, setActiveTab] = useState<'minerals' | 'agro' | 'lubricants'>('minerals');
   const [lubricantGradeFilter, setLubricantGradeFilter] = useState('All');
   const [addedKey, setAddedKey] = useState<string | null>(null);
+  const [exportingPdf, setExportingPdf] = useState(false);
+
+  const lithiumRate = marketConfig.lithiumRatePerPercentUsd;
+  const lithiumAssay = marketConfig.lithiumAssayPct;
+  const lithiumTiers = useMemo(
+    () =>
+      Array.from(new Set([3.5, 4.0, 4.5, lithiumAssay, 5.0, 5.5])).sort(
+        (a, b) => a - b
+      ),
+    [lithiumAssay]
+  );
 
   const filteredLubricants = useMemo(() => {
     if (lubricantGradeFilter === 'All') return LUBRICANT_PRICE_LIST_2026;
@@ -56,6 +71,24 @@ export default function PriceSchedulesSection({
     onAddScheduleItemToManifest(item);
     setAddedKey(key);
     setTimeout(() => setAddedKey(null), 1500);
+  };
+
+  const handleExportSchedulePdf = async () => {
+    if (exportingPdf) return;
+    setExportingPdf(true);
+    try {
+      await exportSchedulePdf(activeTab, lang, {
+        lithiumRatePerPercentUsd: marketConfig.lithiumRatePerPercentUsd,
+        lithiumAssayPct: marketConfig.lithiumAssayPct,
+        agroIssueDate: marketConfig.agroIssueDate,
+        lubricantIssueDate: marketConfig.lubricantIssueDate,
+        quoteValidityDays: marketConfig.quoteValidityDays,
+        fxNgnPerUsd: marketConfig.fxNgnPerUsd,
+        fxXofPerUsd: marketConfig.fxXofPerUsd,
+      });
+    } finally {
+      setExportingPdf(false);
+    }
   };
 
   return (
@@ -74,14 +107,19 @@ export default function PriceSchedulesSection({
             </p>
             <h2 className="font-display text-3xl sm:text-4xl font-bold tracking-tight text-slate-900 text-balance mb-3">
               {lang === 'fr'
-                ? 'Tarifs Officiels Lithium ($207/%), Agro-Export & Lubrifiants'
-                : 'Official Lithium ($207/%), Agro-Commodities & Lubricant Price Lists'}
+                ? `Tarifs Officiels Lithium ($${lithiumRate}/%), Agro-Export & Lubrifiants`
+                : `Official Lithium ($${lithiumRate}/%), Agro-Commodities & Lubricant Price Lists`}
             </h2>
             <p className="text-base text-slate-600 leading-relaxed">
               {lang === 'fr'
-                ? 'Consultez nos tarifs contractuels directs : minerai de lithium à 207 $ par pourcent de Li2O, 18 commodités agroalimentaires FOB Lagos et 30 références de lubrifiants (USD, NGN, XOF).'
-                : 'Transparent origin-sourced pricing: lithium-bearing ore at $207 per 1% Li2O, 18 agro-commodities quoted FOB Lagos, and 30 API SL / CI-4 lubricant SKUs in USD, NGN, and XOF.'}
+                ? `Consultez nos tarifs contractuels directs : minerai de lithium à ${lithiumRate} $ par pourcent de Li2O, 18 commodités agroalimentaires FOB Lagos et 30 références de lubrifiants (USD, NGN, XOF).`
+                : `Transparent origin-sourced pricing: lithium-bearing ore at $${lithiumRate} per 1% Li2O, 18 agro-commodities quoted FOB Lagos, and 30 API SL / CI-4 lubricant SKUs in USD, NGN, and XOF.`}
             </p>
+            {marketConfig.adminNotice.trim().length > 0 && (
+              <p className="mt-2 text-xs font-medium text-amber-800 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-md inline-block">
+                {marketConfig.adminNotice}
+              </p>
+            )}
           </div>
 
           {/* Direct PDF Price List Downloads */}
@@ -109,6 +147,38 @@ export default function PriceSchedulesSection({
                   : 'Lubricants Price List (PDF)'}
               </span>
             </a>
+
+            <button
+              type="button"
+              disabled={exportingPdf}
+              onClick={() => void handleExportSchedulePdf()}
+              className="inline-flex items-center gap-2 px-3.5 py-2.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 disabled:opacity-60 rounded-lg transition-colors whitespace-nowrap cursor-pointer"
+            >
+              {exportingPdf ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />
+              ) : (
+                <FileDown className="w-3.5 h-3.5 text-amber-400" />
+              )}
+              <span>
+                {exportingPdf
+                  ? lang === 'fr'
+                    ? 'Génération PDF...'
+                    : 'Generating PDF...'
+                  : lang === 'fr'
+                    ? 'Exporter Barème en PDF Signé'
+                    : 'Export Schedule Quote PDF'}
+              </span>
+            </button>
+
+            <a
+              href="#price-alert-subscription"
+              className="inline-flex items-center gap-2 px-3.5 py-2.5 text-xs font-semibold text-slate-950 bg-amber-500 hover:bg-amber-400 rounded-lg transition-colors whitespace-nowrap"
+            >
+              <Bell className="w-3.5 h-3.5" />
+              <span>
+                {lang === 'fr' ? 'Alertes Prix' : 'Price Alerts'}
+              </span>
+            </a>
           </div>
         </div>
 
@@ -130,8 +200,8 @@ export default function PriceSchedulesSection({
             }`}
           >
             {lang === 'fr'
-              ? 'Minerais de Lithium ($207 / % Li2O)'
-              : 'Lithium Mineral ($207 / % Li2O)'}
+              ? `Minerais de Lithium ($${lithiumRate} / % Li2O)`
+              : `Lithium Mineral ($${lithiumRate} / % Li2O)`}
           </button>
 
           <button
@@ -176,16 +246,16 @@ export default function PriceSchedulesSection({
                 <div>
                   <h3 className="font-display text-base font-bold text-white">
                     {lang === 'fr'
-                      ? 'Barème Minerai de Lithium (Spodumène / Lépidolite) — 207 USD / 1% Li2O'
-                      : 'Lithium Mineral Rate Schedule — US$207 per 1% Li2O per Metric Ton'}
+                      ? `Barème Minerai de Lithium (Spodumène / Lépidolite) — ${lithiumRate} USD / 1% Li2O`
+                      : `Lithium Mineral Rate Schedule — US$${lithiumRate} per 1% Li2O per Metric Ton`}
                   </h3>
                   <p className="text-xs text-slate-300">
-                    Licence No. 65197 EL · Assay Ref ZMGN057 (4.61% Li2O) · SGS / Bureau Veritas Umpire Sampling
+                    Licence No. 65197 EL · Assay Ref ZMGN057 ({lithiumAssay.toFixed(2)}% Li2O) · SGS / Bureau Veritas Umpire Sampling
                   </p>
                 </div>
               </div>
               <span className="font-mono text-sm font-bold text-amber-400 tabular-nums">
-                $207.00 / 1% Li2O / MT
+                ${lithiumRate.toFixed(2)} / 1% Li2O / MT
               </span>
             </div>
 
@@ -202,10 +272,10 @@ export default function PriceSchedulesSection({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 text-sm">
-                  {LITHIUM_TIERS.map((grade) => {
-                    const pricePerMt = grade * LITHIUM_RATE_PER_PERCENT_USD;
+                  {lithiumTiers.map((grade) => {
+                    const pricePerMt = grade * lithiumRate;
                     const total20ft = pricePerMt * 27;
-                    const isBenchmark = grade === LITHIUM_ASSAY_GRADE_PCT;
+                    const isBenchmark = grade === lithiumAssay;
                     const rowKey = `li-${grade}`;
                     return (
                       <tr
@@ -216,7 +286,7 @@ export default function PriceSchedulesSection({
                           {grade.toFixed(2)}% Li2O
                         </td>
                         <td className="py-3.5 px-4 font-mono text-xs text-slate-600 tabular-nums">
-                          {grade.toFixed(2)} × $207
+                          {grade.toFixed(2)} × ${lithiumRate}
                         </td>
                         <td className="py-3.5 px-4 font-mono font-semibold text-slate-900 tabular-nums">
                           US${pricePerMt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / MT
@@ -241,7 +311,7 @@ export default function PriceSchedulesSection({
                             onClick={() =>
                               handleQuickAdd(rowKey, {
                                 productId: `lithium-${grade}`,
-                                productName: `Lithium Ore (${grade.toFixed(2)}% Li2O @ $207/%)`,
+                                productName: `Lithium Ore (${grade.toFixed(2)}% Li2O @ $${lithiumRate}/%)`,
                                 volumeSummary: '54 MT (2 × 20ft FCL)',
                                 estimatedTotalUsd: Math.round(pricePerMt * 54),
                               })
@@ -281,11 +351,11 @@ export default function PriceSchedulesSection({
                     : 'Official Agro-Commodities & Exported African Food Price List (FOB Lagos)'}
                 </h3>
                 <p className="text-xs text-slate-300">
-                  Port of Loading: Apapa / Tin Can Island · Validity: 10 Calendar Days · Lead Time: 15–25 Working Days · 70/30 Settlement
+                  Port of Loading: Apapa / Tin Can Island · Validity: {marketConfig.quoteValidityDays} Calendar Days · Lead Time: 15–25 Working Days · 70/30 Settlement
                 </p>
               </div>
               <span className="font-mono text-xs text-amber-400">
-                Issue Date: 2026/11/15
+                Issue Date: {marketConfig.agroIssueDate}
               </span>
             </div>
 
@@ -409,11 +479,11 @@ export default function PriceSchedulesSection({
                       : 'Official Kano 2026 Lubricant Price Schedule (USD · NGN · XOF CFA)'}
                   </h3>
                   <p className="text-xs text-slate-300">
-                    EXW Factory / FOB Nansha &amp; Shanghai · FX Benchmark: 1 USD = ₦1,390 | 1 USD = 584.46 XOF · 30/70 T/T
+                    EXW Factory / FOB Nansha &amp; Shanghai · FX Benchmark: 1 USD = ₦{marketConfig.fxNgnPerUsd.toLocaleString('en-US')} | 1 USD = {marketConfig.fxXofPerUsd} XOF · 30/70 T/T
                   </p>
                 </div>
                 <span className="font-mono text-xs text-amber-400">
-                  Issue Date: 2026/11/14
+                  Issue Date: {marketConfig.lubricantIssueDate}
                 </span>
               </div>
 
@@ -504,6 +574,9 @@ export default function PriceSchedulesSection({
             </div>
           </div>
         )}
+
+        {/* Commodity Price Fluctuation Alert Subscription */}
+        <PriceAlertSubscription activeScheduleTab={activeTab} />
       </div>
     </section>
   );

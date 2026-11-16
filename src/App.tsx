@@ -11,6 +11,7 @@ import PriceSchedulesSection, {
   type CustomScheduleItem,
 } from './components/PriceSchedulesSection';
 import AssayVerificationHub from './components/AssayVerificationHub';
+import GlobalLogisticsRoutes from './components/GlobalLogisticsRoutes';
 import ComplianceCenter from './components/ComplianceCenter';
 import LeadershipContact from './components/LeadershipContact';
 import DealRoomModal, {
@@ -137,6 +138,7 @@ function PortalContent() {
           manifestProductIds={manifestItems.map((m) => m.productId)}
         />
         <AssayVerificationHub />
+        <GlobalLogisticsRoutes onSelectRouteForQuote={openDealRoomForProduct} />
         <ComplianceCenter />
         <LeadershipContact onOpenDealRoom={openGeneralDealRoom} />
       </main>

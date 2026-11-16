@@ -10,6 +10,7 @@ import {
   Download,
   Edit3,
   FileCheck2,
+  FileDown,
   FileText,
   Loader2,
   Lock,
@@ -32,6 +33,8 @@ import {
   type TradeDocumentDoc,
 } from '../context/BuyerAuthContext';
 import { useLanguage } from '../i18n/LanguageContext';
+import { exportManifestQuotePdf } from '../utils/pdfQuoteGenerator';
+import AdminWorkspacePanel from './AdminWorkspacePanel';
 
 interface BuyerDashboardModalProps {
   isOpen: boolean;
@@ -101,6 +104,7 @@ export default function BuyerDashboardModal({
     allRfqs,
     allShipments,
     allTradeDocuments,
+    marketConfig,
     signInWithGoogle,
     signOutBuyer,
     updateBuyerProfile,
@@ -122,6 +126,7 @@ export default function BuyerDashboardModal({
   const [showArchivedDocs, setShowArchivedDocs] = useState(false);
   const [expandedDocId, setExpandedDocId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [exportingRfqId, setExportingRfqId] = useState<string | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
 
   // Profile editor state
@@ -323,6 +328,37 @@ export default function BuyerDashboardModal({
     URL.revokeObjectURL(url);
   };
 
+  const handleExportRfqPdf = async (rfq: BuyerRfqDoc) => {
+    if (exportingRfqId) return;
+    setExportingRfqId(rfq.id);
+    try {
+      await exportManifestQuotePdf({
+        refId: rfq.refId,
+        companyName: rfq.companyName,
+        contactName: rfq.contactName,
+        corporateEmail: rfq.corporateEmail,
+        destinationPort: rfq.destinationPort,
+        incoterm: rfq.incoterm,
+        paymentTerms: rfq.paymentTerms,
+        specifications: rfq.specifications,
+        validityDays: marketConfig.quoteValidityDays,
+        manifestItems: [
+          {
+            id: rfq.id,
+            productId: rfq.id,
+            productName: rfq.commoditySummary,
+            volumeSummary: rfq.targetVolume,
+            incoterm: rfq.incoterm,
+            estimatedTotalUsd: rfq.estimatedValueUsd,
+          },
+        ],
+        lang,
+      });
+    } finally {
+      setExportingRfqId(null);
+    }
+  };
+
   const getRfqStepIndex = (status: RfqStatus) => {
     const idx = RFQ_STAGES.indexOf(status);
     return idx === -1 ? 0 : idx;
@@ -519,27 +555,42 @@ export default function BuyerDashboardModal({
           </div>
         </div>
 
-        {/* Action Row: Buyer Amend + Executive Admin Status Switcher */}
+        {/* Action Row: Buyer Amend + Export Quote PDF + Executive Admin Status Switcher */}
         <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
-          {canBuyerAmend && !isEditing ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {canBuyerAmend && !isEditing && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingRfqId(rfq.id);
+                  setRfqPortDraft(rfq.destinationPort);
+                  setRfqVolumeDraft(rfq.targetVolume);
+                  setRfqSpecsDraft(rfq.specifications || '');
+                }}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors cursor-pointer"
+              >
+                <Edit3 className="w-3 h-3" />
+                <span>
+                  {lang === 'fr' ? 'Modifier détails' : 'Amend Details'}
+                </span>
+              </button>
+            )}
             <button
               type="button"
-              onClick={() => {
-                setEditingRfqId(rfq.id);
-                setRfqPortDraft(rfq.destinationPort);
-                setRfqVolumeDraft(rfq.targetVolume);
-                setRfqSpecsDraft(rfq.specifications || '');
-              }}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors cursor-pointer"
+              disabled={exportingRfqId === rfq.id}
+              onClick={() => void handleExportRfqPdf(rfq)}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 disabled:opacity-60 rounded-md transition-colors cursor-pointer"
             >
-              <Edit3 className="w-3 h-3" />
+              {exportingRfqId === rfq.id ? (
+                <Loader2 className="w-3 h-3 animate-spin text-amber-400" />
+              ) : (
+                <FileDown className="w-3 h-3 text-amber-400" />
+              )}
               <span>
-                {lang === 'fr' ? 'Modifier détails' : 'Amend Details'}
+                {lang === 'fr' ? 'Devis PDF' : 'Export Quote PDF'}
               </span>
             </button>
-          ) : (
-            <span />
-          )}
+          </div>
 
           {workspaceMode === 'admin' && isAdminUser && (
             <div className="flex flex-wrap items-center gap-1.5">
@@ -783,7 +834,13 @@ export default function BuyerDashboardModal({
     >
       <div aria-hidden="true" onClick={onClose} className="fixed inset-0" />
 
-      <div className="relative z-10 w-full max-w-5xl bg-slate-50 border border-slate-200 rounded-xl shadow-2xl overflow-hidden my-auto max-h-[93vh] flex flex-col">
+      <div
+        className={`relative z-10 w-full ${
+          workspaceMode === 'admin' && isAdminUser
+            ? 'max-w-[1340px]'
+            : 'max-w-5xl'
+        } bg-slate-50 border border-slate-200 rounded-xl shadow-2xl overflow-hidden my-auto max-h-[93vh] flex flex-col`}
+      >
         {/* Executive Overlay Top Bar */}
         <div className="px-5 sm:px-6 py-4 bg-slate-950 text-white flex items-center justify-between gap-4 shrink-0 border-b border-slate-800">
           <div className="flex items-center gap-3 min-w-0">
@@ -812,12 +869,12 @@ export default function BuyerDashboardModal({
               <div
                 role="group"
                 aria-label="Workspace Role Switch"
-                className="hidden md:inline-flex items-center p-0.5 bg-slate-900 border border-slate-700 rounded-md text-xs"
+                className="inline-flex items-center p-0.5 bg-slate-900 border border-slate-700 rounded-md text-xs"
               >
                 <button
                   type="button"
                   onClick={() => setWorkspaceMode('buyer')}
-                  className={`px-2.5 py-1 font-semibold rounded transition-colors cursor-pointer ${
+                  className={`px-2.5 py-1 font-semibold rounded transition-colors cursor-pointer whitespace-nowrap ${
                     workspaceMode === 'buyer'
                       ? 'bg-amber-500 text-slate-950'
                       : 'text-slate-300 hover:text-white'
@@ -828,7 +885,7 @@ export default function BuyerDashboardModal({
                 <button
                   type="button"
                   onClick={() => setWorkspaceMode('admin')}
-                  className={`px-2.5 py-1 font-semibold rounded transition-colors cursor-pointer ${
+                  className={`px-2.5 py-1 font-semibold rounded transition-colors cursor-pointer whitespace-nowrap ${
                     workspaceMode === 'admin'
                       ? 'bg-emerald-500 text-slate-950'
                       : 'text-slate-300 hover:text-white'
@@ -1126,7 +1183,8 @@ export default function BuyerDashboardModal({
               </div>
 
               {/* Actionable Trade Status Callout */}
-              {(pendingDocsCount > 0 || inTransitCount > 0) && (
+              {workspaceMode !== 'admin' &&
+                (pendingDocsCount > 0 || inTransitCount > 0) && (
                 <div className="px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs">
                   <div className="flex items-center gap-2 text-slate-800">
                     <SlidersHorizontal className="w-4 h-4 text-amber-700 shrink-0" />
@@ -1181,100 +1239,104 @@ export default function BuyerDashboardModal({
                 </div>
               )}
 
-              {/* 3-Column KPI Summary */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('rfqs')}
-                  className={`p-4 text-left rounded-xl border transition-colors cursor-pointer ${
-                    activeTab === 'rfqs'
-                      ? 'bg-slate-900 text-white border-slate-900'
-                      : 'bg-white text-slate-900 border-slate-200 hover:border-slate-300'
-                  }`}
-                >
-                  <div
-                    className={`text-xs font-medium flex items-center gap-1.5 ${
-                      activeTab === 'rfqs' ? 'text-amber-400' : 'text-slate-500'
-                    }`}
-                  >
-                    <ClipboardList className="w-3.5 h-3.5" />
-                    <span>
-                      {lang === 'fr' ? 'Demandes RFQ Actives' : 'Active RFQ Status'}
-                    </span>
-                  </div>
-                  <div className="font-mono text-2xl font-bold mt-1 tabular-nums">
-                    {activeRfqsList.length}
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('shipments')}
-                  className={`p-4 text-left rounded-xl border transition-colors cursor-pointer ${
-                    activeTab === 'shipments'
-                      ? 'bg-slate-900 text-white border-slate-900'
-                      : 'bg-white text-slate-900 border-slate-200 hover:border-slate-300'
-                  }`}
-                >
-                  <div
-                    className={`text-xs font-medium flex items-center gap-1.5 ${
-                      activeTab === 'shipments'
-                        ? 'text-amber-400'
-                        : 'text-slate-500'
-                    }`}
-                  >
-                    <Ship className="w-3.5 h-3.5" />
-                    <span>
-                      {lang === 'fr'
-                        ? 'Expéditions & Suivi FCL'
-                        : 'Shipment Tracking'}
-                    </span>
-                  </div>
-                  <div className="font-mono text-2xl font-bold mt-1 tabular-nums">
-                    {activeShipmentsList.length}
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('documents')}
-                  className={`p-4 text-left rounded-xl border transition-colors cursor-pointer ${
-                    activeTab === 'documents'
-                      ? 'bg-slate-900 text-white border-slate-900'
-                      : 'bg-white text-slate-900 border-slate-200 hover:border-slate-300'
-                  }`}
-                >
-                  <div
-                    className={`text-xs font-medium flex items-center gap-1.5 ${
-                      activeTab === 'documents'
-                        ? 'text-amber-400'
-                        : 'text-slate-500'
-                    }`}
-                  >
-                    <FileText className="w-3.5 h-3.5" />
-                    <span>
-                      {lang === 'fr'
-                        ? 'Documents Commerciaux'
-                        : 'Historical Trade Docs'}
-                    </span>
-                  </div>
-                  <div className="font-mono text-2xl font-bold mt-1 tabular-nums">
-                    {activeDocsList.length}
-                  </div>
-                </button>
-              </div>
-
-              {/* Loading Skeleton */}
-              {dataLoading ? (
-                <div className="py-12 flex items-center justify-center gap-2 text-sm text-slate-600">
-                  <Loader2 className="w-5 h-5 animate-spin text-amber-600" />
-                  <span>
-                    {lang === 'fr'
-                      ? 'Synchronisation de votre dossier commercial...'
-                      : 'Synchronizing your Firestore trade records...'}
-                  </span>
-                </div>
+              {workspaceMode === 'admin' && isAdminUser ? (
+                <AdminWorkspacePanel />
               ) : (
+                <>
+                  {/* 3-Column KPI Summary */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('rfqs')}
+                      className={`p-4 text-left rounded-xl border transition-colors cursor-pointer ${
+                        activeTab === 'rfqs'
+                          ? 'bg-slate-900 text-white border-slate-900'
+                          : 'bg-white text-slate-900 border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <div
+                        className={`text-xs font-medium flex items-center gap-1.5 ${
+                          activeTab === 'rfqs' ? 'text-amber-400' : 'text-slate-500'
+                        }`}
+                      >
+                        <ClipboardList className="w-3.5 h-3.5" />
+                        <span>
+                          {lang === 'fr' ? 'Demandes RFQ Actives' : 'Active RFQ Status'}
+                        </span>
+                      </div>
+                      <div className="font-mono text-2xl font-bold mt-1 tabular-nums">
+                        {activeRfqsList.length}
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('shipments')}
+                      className={`p-4 text-left rounded-xl border transition-colors cursor-pointer ${
+                        activeTab === 'shipments'
+                          ? 'bg-slate-900 text-white border-slate-900'
+                          : 'bg-white text-slate-900 border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <div
+                        className={`text-xs font-medium flex items-center gap-1.5 ${
+                          activeTab === 'shipments'
+                            ? 'text-amber-400'
+                            : 'text-slate-500'
+                        }`}
+                      >
+                        <Ship className="w-3.5 h-3.5" />
+                        <span>
+                          {lang === 'fr'
+                            ? 'Expéditions & Suivi FCL'
+                            : 'Shipment Tracking'}
+                        </span>
+                      </div>
+                      <div className="font-mono text-2xl font-bold mt-1 tabular-nums">
+                        {activeShipmentsList.length}
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('documents')}
+                      className={`p-4 text-left rounded-xl border transition-colors cursor-pointer ${
+                        activeTab === 'documents'
+                          ? 'bg-slate-900 text-white border-slate-900'
+                          : 'bg-white text-slate-900 border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <div
+                        className={`text-xs font-medium flex items-center gap-1.5 ${
+                          activeTab === 'documents'
+                            ? 'text-amber-400'
+                            : 'text-slate-500'
+                        }`}
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        <span>
+                          {lang === 'fr'
+                            ? 'Documents Commerciaux'
+                            : 'Historical Trade Docs'}
+                        </span>
+                      </div>
+                      <div className="font-mono text-2xl font-bold mt-1 tabular-nums">
+                        {activeDocsList.length}
+                      </div>
+                    </button>
+                  </div>
+
+                  {/* Loading Skeleton */}
+                  {dataLoading ? (
+                    <div className="py-12 flex items-center justify-center gap-2 text-sm text-slate-600">
+                      <Loader2 className="w-5 h-5 animate-spin text-amber-600" />
+                      <span>
+                        {lang === 'fr'
+                          ? 'Synchronisation de votre dossier commercial...'
+                          : 'Synchronizing your Firestore trade records...'}
+                      </span>
+                    </div>
+                  ) : (
                 <>
                   {/* Tab 1: Active RFQs */}
                   {activeTab === 'rfqs' && (
@@ -1524,6 +1586,8 @@ export default function BuyerDashboardModal({
                       )}
                     </div>
                   )}
+                </>
+              )}
                 </>
               )}
             </div>

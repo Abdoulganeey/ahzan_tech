@@ -2,362 +2,308 @@
   "entities": {
     "BuyerProfile": {
       "title": "BuyerProfile",
-      "description": "Authenticated B2B buyer workspace profile isolated per user UID.",
+      "description": "Authenticated B2B buyer workspace profile isolated per user UID, or admin-synced Lithium Intel buyer account record.",
       "type": "object",
       "properties": {
-        "buyerUid": {
-          "type": "string",
-          "description": "Firebase Auth UID of the buyer.",
-          "minLength": 1,
-          "maxLength": 128,
-          "pattern": "^[a-zA-Z0-9_\\-]+$"
-        },
-        "companyName": {
-          "type": "string",
-          "description": "Registered buyer organization name.",
-          "minLength": 2,
-          "maxLength": 160
-        },
-        "contactName": {
-          "type": "string",
-          "description": "Authorized buyer representative.",
-          "minLength": 2,
-          "maxLength": 120
-        },
-        "email": {
-          "type": "string",
-          "format": "email",
-          "description": "Corporate email address of the buyer.",
-          "minLength": 5,
-          "maxLength": 160
-        },
-        "defaultPort": {
-          "type": "string",
-          "description": "Default destination discharge port.",
-          "minLength": 2,
-          "maxLength": 120
-        },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time",
-          "description": "Server creation timestamp."
-        },
-        "updatedAt": {
-          "type": "string",
-          "format": "date-time",
-          "description": "Server update timestamp."
-        }
+        "buyerUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ownerUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "rankId": { "type": "number" },
+        "normalizedCompanyKey": { "type": "string", "maxLength": 120 },
+        "companyName": { "type": "string", "minLength": 2, "maxLength": 160 },
+        "contactName": { "type": "string", "maxLength": 120 },
+        "email": { "type": "string", "format": "email", "maxLength": 160 },
+        "defaultPort": { "type": "string", "maxLength": 120 },
+        "leadCategory": { "type": "string", "enum": ["LITHIUM", "AFRICA_SOURCING", "FUNDING_FINANCE"] },
+        "regionCode": { "type": "string", "maxLength": 64 },
+        "crmStage": { "type": "string", "enum": ["PROSPECT", "CONTACTED", "QUALIFIED", "PROPOSAL_QUOTE", "NEGOTIATION", "WON", "LOST"] },
+        "outreachStatus": { "type": "string", "maxLength": 40 },
+        "priorityScore": { "type": "number" },
+        "priorityTier": { "type": "string", "enum": ["A", "B", "C"] },
+        "targetFobValue": { "type": "number" },
+        "lastUpdatedMillis": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": [
-        "buyerUid",
-        "companyName",
-        "contactName",
-        "email",
-        "defaultPort",
-        "createdAt",
-        "updatedAt"
-      ]
+      "required": ["companyName", "createdAt", "updatedAt"]
     },
     "BuyerRfq": {
       "title": "BuyerRfq",
-      "description": "B2B Request for Quote or Letter of Intent submitted by an authenticated buyer.",
+      "description": "B2B Request for Quote or Letter of Intent linked optionally to Lithium Intel leadRankId.",
       "type": "object",
       "properties": {
-        "buyerUid": {
-          "type": "string",
-          "description": "Owner Firebase Auth UID.",
-          "minLength": 1,
-          "maxLength": 128,
-          "pattern": "^[a-zA-Z0-9_\\-]+$"
-        },
-        "refId": {
-          "type": "string",
-          "description": "Unique RFQ reference code.",
-          "minLength": 4,
-          "maxLength": 40,
-          "pattern": "^[a-zA-Z0-9_\\-]+$"
-        },
-        "companyName": {
-          "type": "string",
-          "minLength": 2,
-          "maxLength": 160
-        },
-        "contactName": {
-          "type": "string",
-          "minLength": 2,
-          "maxLength": 120
-        },
-        "corporateEmail": {
-          "type": "string",
-          "format": "email",
-          "minLength": 5,
-          "maxLength": 160
-        },
-        "destinationPort": {
-          "type": "string",
-          "minLength": 2,
-          "maxLength": 120
-        },
-        "commoditySummary": {
-          "type": "string",
-          "minLength": 2,
-          "maxLength": 300
-        },
-        "targetVolume": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 120
-        },
-        "incoterm": {
-          "type": "string",
-          "enum": ["EXW", "FOB", "CFR", "CIF", "DAP"]
-        },
-        "paymentTerms": {
-          "type": "string",
-          "minLength": 2,
-          "maxLength": 120
-        },
-        "specifications": {
-          "type": "string",
-          "maxLength": 1000
-        },
-        "status": {
-          "type": "string",
-          "enum": [
-            "Submitted",
-            "Under Executive Review",
-            "SCO / Proforma Issued",
-            "L/C Confirmed",
-            "Export Cleared"
-          ]
-        },
-        "estimatedValueUsd": {
-          "type": "number"
-        },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "updatedAt": {
-          "type": "string",
-          "format": "date-time"
-        }
+        "buyerUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "refId": { "type": "string", "minLength": 4, "maxLength": 40, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "leadRankId": { "type": "number" },
+        "companyName": { "type": "string", "minLength": 2, "maxLength": 160 },
+        "contactName": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "corporateEmail": { "type": "string", "format": "email", "minLength": 5, "maxLength": 160 },
+        "destinationPort": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "commoditySummary": { "type": "string", "minLength": 2, "maxLength": 300 },
+        "productDescription": { "type": "string", "maxLength": 400 },
+        "targetVolume": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "quantityMt": { "type": "number" },
+        "unitPriceUsd": { "type": "number" },
+        "totalValueUsd": { "type": "number" },
+        "incoterm": { "type": "string", "enum": ["EXW", "FOB", "CFR", "CIF", "DAP"] },
+        "paymentTerms": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "validityDays": { "type": "number" },
+        "specifications": { "type": "string", "maxLength": 1000 },
+        "status": { "type": "string", "enum": ["Submitted", "Under Executive Review", "SCO / Proforma Issued", "L/C Confirmed", "Export Cleared"] },
+        "estimatedValueUsd": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": [
-        "buyerUid",
-        "refId",
-        "companyName",
-        "contactName",
-        "corporateEmail",
-        "destinationPort",
-        "commoditySummary",
-        "targetVolume",
-        "incoterm",
-        "paymentTerms",
-        "status",
-        "createdAt",
-        "updatedAt"
-      ]
+      "required": ["buyerUid", "refId", "companyName", "contactName", "corporateEmail", "destinationPort", "commoditySummary", "targetVolume", "incoterm", "paymentTerms", "status", "createdAt", "updatedAt"]
     },
     "BuyerShipment": {
       "title": "BuyerShipment",
-      "description": "Export shipment tracking record linked to an authenticated buyer.",
+      "description": "Export shipment tracking record linked optionally to Lithium Intel leadRankId.",
       "type": "object",
       "properties": {
-        "buyerUid": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 128,
-          "pattern": "^[a-zA-Z0-9_\\-]+$"
-        },
-        "trackingCode": {
-          "type": "string",
-          "minLength": 4,
-          "maxLength": 48,
-          "pattern": "^[a-zA-Z0-9_\\-]+$"
-        },
-        "rfqRefId": {
-          "type": "string",
-          "minLength": 4,
-          "maxLength": 40,
-          "pattern": "^[a-zA-Z0-9_\\-]+$"
-        },
-        "commodity": {
-          "type": "string",
-          "minLength": 2,
-          "maxLength": 180
-        },
-        "originPort": {
-          "type": "string",
-          "minLength": 2,
-          "maxLength": 120
-        },
-        "destinationPort": {
-          "type": "string",
-          "minLength": 2,
-          "maxLength": 120
-        },
-        "vesselName": {
-          "type": "string",
-          "minLength": 2,
-          "maxLength": 120
-        },
-        "billOfLadingNo": {
-          "type": "string",
-          "minLength": 2,
-          "maxLength": 80
-        },
-        "containerAllocation": {
-          "type": "string",
-          "minLength": 2,
-          "maxLength": 80
-        },
-        "stageIndex": {
-          "type": "number"
-        },
-        "status": {
-          "type": "string",
-          "enum": [
-            "Mine / Farm Gate",
-            "SGS Assay Verification",
-            "NESS & Customs Cleared",
-            "In Ocean Transit",
-            "Discharged at Port"
-          ]
-        },
-        "etaDate": {
-          "type": "string",
-          "minLength": 4,
-          "maxLength": 40
-        },
-        "lastUpdateNote": {
-          "type": "string",
-          "minLength": 4,
-          "maxLength": 320
-        },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "updatedAt": {
-          "type": "string",
-          "format": "date-time"
-        }
+        "buyerUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "trackingCode": { "type": "string", "minLength": 4, "maxLength": 48, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "rfqRefId": { "type": "string", "minLength": 4, "maxLength": 40, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "leadRankId": { "type": "number" },
+        "companyName": { "type": "string", "maxLength": 160 },
+        "commodity": { "type": "string", "minLength": 2, "maxLength": 180 },
+        "originPort": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "destinationPort": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "vesselName": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "vesselOrContainerRef": { "type": "string", "maxLength": 120 },
+        "billOfLadingNo": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "containerAllocation": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "sgsInspectionStatus": { "type": "string", "maxLength": 80 },
+        "stageIndex": { "type": "number" },
+        "status": { "type": "string", "enum": ["Mine / Farm Gate", "SGS Assay Verification", "NESS & Customs Cleared", "In Ocean Transit", "Discharged at Port"] },
+        "etaDate": { "type": "string", "minLength": 4, "maxLength": 40 },
+        "lastUpdateNote": { "type": "string", "minLength": 4, "maxLength": 320 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": [
-        "buyerUid",
-        "trackingCode",
-        "rfqRefId",
-        "commodity",
-        "originPort",
-        "destinationPort",
-        "vesselName",
-        "billOfLadingNo",
-        "containerAllocation",
-        "stageIndex",
-        "status",
-        "etaDate",
-        "lastUpdateNote",
-        "createdAt",
-        "updatedAt"
-      ]
+      "required": ["buyerUid", "trackingCode", "rfqRefId", "commodity", "originPort", "destinationPort", "vesselName", "billOfLadingNo", "containerAllocation", "stageIndex", "status", "etaDate", "lastUpdateNote", "createdAt", "updatedAt"]
     },
     "TradeDocument": {
       "title": "TradeDocument",
-      "description": "Historical and active verified trade documentation for an authenticated buyer.",
+      "description": "Verified trade certificates, B/L records, and Document Studio formal PDF issuances (AZT-PL..AZT-NCN).",
       "type": "object",
       "properties": {
-        "buyerUid": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 128,
-          "pattern": "^[a-zA-Z0-9_\\-]+$"
-        },
-        "docCode": {
-          "type": "string",
-          "minLength": 4,
-          "maxLength": 48,
-          "pattern": "^[a-zA-Z0-9_\\-]+$"
-        },
-        "title": {
-          "type": "string",
-          "minLength": 3,
-          "maxLength": 180
-        },
-        "docType": {
-          "type": "string",
-          "enum": [
-            "Proforma Invoice",
-            "SGS Assay Certificate",
-            "Bill of Lading",
-            "Certificate of Origin",
-            "Phytosanitary Certificate",
-            "Form NXP / NESS Clearance"
-          ]
-        },
-        "rfqRefId": {
-          "type": "string",
-          "minLength": 4,
-          "maxLength": 40,
-          "pattern": "^[a-zA-Z0-9_\\-]+$"
-        },
-        "commodity": {
-          "type": "string",
-          "minLength": 2,
-          "maxLength": 160
-        },
-        "issuer": {
-          "type": "string",
-          "minLength": 2,
-          "maxLength": 120
-        },
-        "issuedDate": {
-          "type": "string",
-          "minLength": 4,
-          "maxLength": 40
-        },
-        "status": {
-          "type": "string",
-          "enum": ["Verified", "Pending Countersignature", "Archived"]
-        },
-        "summaryText": {
-          "type": "string",
-          "minLength": 4,
-          "maxLength": 1500
-        },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "updatedAt": {
-          "type": "string",
-          "format": "date-time"
-        }
+        "buyerUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "docCode": { "type": "string", "minLength": 4, "maxLength": 48, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "referenceNo": { "type": "string", "maxLength": 64 },
+        "title": { "type": "string", "minLength": 3, "maxLength": 180 },
+        "docType": { "type": "string", "enum": ["Proforma Invoice", "SGS Assay Certificate", "Bill of Lading", "Certificate of Origin", "Phytosanitary Certificate", "Form NXP / NESS Clearance", "PRICE_LIST", "LOI", "MOU", "FCO", "PROFORMA_INVOICE", "SALES_CONTRACT", "MANDATE_NCNDA"] },
+        "rfqRefId": { "type": "string", "minLength": 4, "maxLength": 40, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "leadRankId": { "type": "number" },
+        "counterpartyCompany": { "type": "string", "maxLength": 160 },
+        "commodity": { "type": "string", "minLength": 2, "maxLength": 160 },
+        "issuer": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "issuedDate": { "type": "string", "minLength": 4, "maxLength": 40 },
+        "status": { "type": "string", "enum": ["Verified", "Pending Countersignature", "Archived"] },
+        "incoterm": { "type": "string", "enum": ["EXW", "FOB", "CFR", "CIF", "DAP"] },
+        "totalValue": { "type": "number" },
+        "createdAtMillis": { "type": "number" },
+        "summaryText": { "type": "string", "minLength": 4, "maxLength": 1500 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": [
-        "buyerUid",
-        "docCode",
-        "title",
-        "docType",
-        "rfqRefId",
-        "commodity",
-        "issuer",
-        "issuedDate",
-        "status",
-        "summaryText",
-        "createdAt",
-        "updatedAt"
-      ]
+      "required": ["buyerUid", "docCode", "title", "docType", "rfqRefId", "commodity", "issuer", "issuedDate", "status", "summaryText", "createdAt", "updatedAt"]
+    },
+    "PriceAlert": {
+      "title": "PriceAlert",
+      "description": "Commodity price fluctuation alert subscription.",
+      "type": "object",
+      "properties": {
+        "buyerUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "format": "email", "minLength": 5, "maxLength": 160 },
+        "commodityKey": { "type": "string", "minLength": 2, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "commodityLabel": { "type": "string", "minLength": 2, "maxLength": 160 },
+        "category": { "type": "string", "enum": ["Critical Minerals", "Agro-Commodities", "Lubricants"] },
+        "baselinePrice": { "type": "number" },
+        "unitLabel": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "triggerDirection": { "type": "string", "enum": ["below", "above", "pct_change"] },
+        "thresholdValue": { "type": "number" },
+        "channel": { "type": "string", "enum": ["email", "email_whatsapp"] },
+        "status": { "type": "string", "enum": ["Active", "Paused"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["buyerUid", "email", "commodityKey", "commodityLabel", "category", "baselinePrice", "unitLabel", "triggerDirection", "thresholdValue", "channel", "status", "createdAt", "updatedAt"]
+    },
+    "MarketConfig": {
+      "title": "MarketConfig",
+      "description": "Synchronized official benchmarks, canonical EL 65197 feedstock identity, and bank/investor readiness flags.",
+      "type": "object",
+      "properties": {
+        "lithiumRatePerPercentUsd": { "type": "number" },
+        "lithiumAssayPct": { "type": "number" },
+        "agroIssueDate": { "type": "string", "minLength": 4, "maxLength": 40 },
+        "lubricantIssueDate": { "type": "string", "minLength": 4, "maxLength": 40 },
+        "quoteValidityDays": { "type": "number" },
+        "fxNgnPerUsd": { "type": "number" },
+        "fxXofPerUsd": { "type": "number" },
+        "adminNotice": { "type": "string", "maxLength": 320 },
+        "companyName": { "type": "string", "maxLength": 120 },
+        "domain": { "type": "string", "maxLength": 120 },
+        "ceoName": { "type": "string", "maxLength": 120 },
+        "ceoEmail": { "type": "string", "maxLength": 160 },
+        "primaryMineralAsset": { "type": "string", "maxLength": 200 },
+        "miningCadastreId": { "type": "string", "maxLength": 80 },
+        "miningLocation": { "type": "string", "maxLength": 160 },
+        "assayRefPrimary": { "type": "string", "maxLength": 160 },
+        "assayRefSecondary": { "type": "string", "maxLength": 160 },
+        "activeSupplyCorridors": { "type": "string", "maxLength": 400 },
+        "multiCommodityCapabilities": { "type": "string", "maxLength": 400 },
+        "bankReadinessDocs": { "type": "object" },
+        "updatedByUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["lithiumRatePerPercentUsd", "lithiumAssayPct", "agroIssueDate", "lubricantIssueDate", "quoteValidityDays", "fxNgnPerUsd", "fxXofPerUsd", "adminNotice", "updatedByUid", "updatedAt"]
+    },
+    "CrmContact": {
+      "title": "CrmContact",
+      "description": "Executive CRM contact directory record synchronized across Android and web.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "leadRankId": { "type": "number" },
+        "normalizedCompanyKey": { "type": "string", "maxLength": 120 },
+        "fullName": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "companyName": { "type": "string", "minLength": 2, "maxLength": 160 },
+        "roleTitle": { "type": "string", "maxLength": 120 },
+        "email": { "type": "string", "format": "email", "minLength": 5, "maxLength": 160 },
+        "directEmail": { "type": "string", "maxLength": 160 },
+        "phoneWhatsapp": { "type": "string", "maxLength": 60 },
+        "countryPort": { "type": "string", "maxLength": 120 },
+        "websiteUrl": { "type": "string", "maxLength": 240 },
+        "segment": { "type": "string", "enum": ["Offtaker", "Broker", "Supplier", "Logistics", "VIP"] },
+        "tagsSummary": { "type": "string", "maxLength": 240 },
+        "notes": { "type": "string", "maxLength": 1500 },
+        "source": { "type": "string", "enum": ["Manual", "Companion App", "Website RFQ", "Price Alert", "Direct Inquiry"] },
+        "lastUpdatedMillis": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "fullName", "companyName", "roleTitle", "email", "phoneWhatsapp", "countryPort", "segment", "tagsSummary", "notes", "source", "createdAt", "updatedAt"]
+    },
+    "CrmLead": {
+      "title": "CrmLead",
+      "description": "Unified Lithium Intel Trade Book & B2B Pipeline lead record with 1:1 Android schema compatibility.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "rankId": { "type": "number" },
+        "normalizedCompanyKey": { "type": "string", "maxLength": 120 },
+        "leadCategory": { "type": "string", "enum": ["LITHIUM", "AFRICA_SOURCING", "FUNDING_FINANCE"] },
+        "regionCode": { "type": "string", "maxLength": 64 },
+        "location": { "type": "string", "maxLength": 160 },
+        "primaryRole": { "type": "string", "maxLength": 160 },
+        "priorityScore": { "type": "number" },
+        "priorityTier": { "type": "string", "enum": ["A", "B", "C"] },
+        "fitScore": { "type": "number" },
+        "procScore": { "type": "number" },
+        "finScore": { "type": "number" },
+        "dmScore": { "type": "number" },
+        "esgScore": { "type": "number" },
+        "volScore": { "type": "number" },
+        "decisionMaker": { "type": "string", "maxLength": 120 },
+        "title": { "type": "string", "minLength": 2, "maxLength": 180 },
+        "contactId": { "type": "string", "maxLength": 128 },
+        "contactName": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "companyName": { "type": "string", "minLength": 2, "maxLength": 160 },
+        "email": { "type": "string", "format": "email", "minLength": 5, "maxLength": 160 },
+        "generalEmail": { "type": "string", "maxLength": 160 },
+        "directEmail": { "type": "string", "maxLength": 160 },
+        "emailRouteNote": { "type": "string", "maxLength": 200 },
+        "phoneWhatsapp": { "type": "string", "maxLength": 60 },
+        "whatsappNumber": { "type": "string", "maxLength": 60 },
+        "websiteUrl": { "type": "string", "maxLength": 240 },
+        "websiteDisplay": { "type": "string", "maxLength": 160 },
+        "profileSource": { "type": "string", "maxLength": 120 },
+        "operationalFit": { "type": "string", "maxLength": 1000 },
+        "emailSubject": { "type": "string", "maxLength": 240 },
+        "emailBody": { "type": "string", "maxLength": 4000 },
+        "linkedInNote": { "type": "string", "maxLength": 500 },
+        "commodityInterest": { "type": "string", "minLength": 2, "maxLength": 200 },
+        "outreachStatus": { "type": "string", "enum": ["READY", "WHATSAPP_SENT", "EMAIL_SENT", "LINKEDIN_SENT", "IN_DISCUSSION", "SAMPLE_REQUESTED", "DEAL_IN_PROGRESS", "RISK_PREPAY_ONLY", "PAUSED"] },
+        "crmStage": { "type": "string", "enum": ["PROSPECT", "CONTACTED", "QUALIFIED", "PROPOSAL_QUOTE", "NEGOTIATION", "WON", "LOST"] },
+        "winProbability": { "type": "number" },
+        "estimatedTonnage": { "type": "number" },
+        "targetFobValue": { "type": "number" },
+        "impliedFobPricePerMt": { "type": "number" },
+        "weightedValueUsd": { "type": "number" },
+        "followUpAtMillis": { "type": "number" },
+        "nextAction": { "type": "string", "maxLength": 240 },
+        "tags": { "type": "string", "maxLength": 300 },
+        "lostReason": { "type": "string", "maxLength": 300 },
+        "isRiskWatch": { "type": "boolean" },
+        "isCustomLead": { "type": "boolean" },
+        "leadSource": { "type": "string", "maxLength": 120 },
+        "lastUpdatedMillis": { "type": "number" },
+        "stage": { "type": "string", "enum": ["New Lead", "Qualified", "Proposal / SCO Sent", "Negotiation", "Won / Contracted", "Lost / Archived"] },
+        "priority": { "type": "string", "enum": ["High", "Medium", "Low"] },
+        "dealValueUsd": { "type": "number" },
+        "followUpDate": { "type": "string", "maxLength": 40 },
+        "source": { "type": "string", "enum": ["Manual", "Companion App", "Website RFQ", "Price Alert", "Direct Inquiry"] },
+        "notes": { "type": "string", "maxLength": 1500 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "title", "contactId", "contactName", "companyName", "email", "phoneWhatsapp", "commodityInterest", "stage", "priority", "dealValueUsd", "followUpDate", "source", "notes", "createdAt", "updatedAt"]
+    },
+    "CrmEmailLog": {
+      "title": "CrmEmailLog",
+      "description": "Unified CRM email threads & pipeline activity timeline (WHATSAPP, CALL, EMAIL, MEETING, QUOTE_SENT, NOTE, STAGE_CHANGE).",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "leadRankId": { "type": "number" },
+        "activityType": { "type": "string", "enum": ["WHATSAPP", "CALL", "EMAIL", "MEETING", "QUOTE_SENT", "NOTE", "STAGE_CHANGE"] },
+        "outcome": { "type": "string", "maxLength": 200 },
+        "summary": { "type": "string", "maxLength": 1500 },
+        "quoteAmountUsd": { "type": "number" },
+        "createdAtMillis": { "type": "number" },
+        "direction": { "type": "string", "enum": ["Outbound", "Inbound", "Draft"] },
+        "toEmail": { "type": "string", "format": "email", "minLength": 5, "maxLength": 160 },
+        "fromEmail": { "type": "string", "format": "email", "minLength": 5, "maxLength": 160 },
+        "contactName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "companyName": { "type": "string", "maxLength": 160 },
+        "leadId": { "type": "string", "maxLength": 128 },
+        "subject": { "type": "string", "minLength": 2, "maxLength": 200 },
+        "body": { "type": "string", "minLength": 2, "maxLength": 5000 },
+        "status": { "type": "string", "enum": ["Sent", "Received", "Scheduled", "Draft"] },
+        "sentDate": { "type": "string", "minLength": 4, "maxLength": 40 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "direction", "toEmail", "fromEmail", "contactName", "companyName", "leadId", "subject", "body", "status", "sentDate", "createdAt", "updatedAt"]
+    },
+    "CrmTask": {
+      "title": "CrmTask",
+      "description": "Executive CRM follow-up tasks linked to Lithium Intel leadRankId.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "leadRankId": { "type": "number" },
+        "companyName": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "title": { "type": "string", "minLength": 2, "maxLength": 240 },
+        "priority": { "type": "string", "enum": ["HIGH", "MEDIUM", "LOW"] },
+        "dueAtMillis": { "type": "number" },
+        "isCompleted": { "type": "boolean" },
+        "completedAtMillis": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "leadRankId", "companyName", "title", "priority", "dueAtMillis", "isCompleted", "createdAt", "updatedAt"]
     }
   },
   "firestore": {
     "/buyers/{buyerId}": {
       "schema": { "$ref": "#/entities/BuyerProfile" },
-      "description": "Private buyer profile and workspace settings keyed by Auth UID."
+      "description": "Private buyer profile keyed by Auth UID or admin-synced Lithium Intel buyer records."
     },
     "/rfqs/{rfqId}": {
       "schema": { "$ref": "#/entities/BuyerRfq" },
-      "description": "Buyer-owned RFQs and LOIs with status tracking."
+      "description": "Buyer-owned RFQs and LOIs with Lithium Intel leadRankId linkage."
     },
     "/shipments/{shipmentId}": {
       "schema": { "$ref": "#/entities/BuyerShipment" },
@@ -365,7 +311,31 @@
     },
     "/tradeDocuments/{docId}": {
       "schema": { "$ref": "#/entities/TradeDocument" },
-      "description": "Buyer-owned historical and active trade certificates and B/L records."
+      "description": "Verified trade certificates and formal Document Studio issuances (AZT-PL..AZT-NCN)."
+    },
+    "/priceAlerts/{alertId}": {
+      "schema": { "$ref": "#/entities/PriceAlert" },
+      "description": "Commodity price fluctuation alert subscriptions."
+    },
+    "/siteConfig/{configId}": {
+      "schema": { "$ref": "#/entities/MarketConfig" },
+      "description": "Official pricing rates, canonical EL 65197 metadata, and FX benchmarks."
+    },
+    "/crmContacts/{contactId}": {
+      "schema": { "$ref": "#/entities/CrmContact" },
+      "description": "Admin-managed B2B contacts directory."
+    },
+    "/crmLeads/{leadId}": {
+      "schema": { "$ref": "#/entities/CrmLead" },
+      "description": "Admin-managed Lithium Intel trade book and pipeline leads."
+    },
+    "/crmEmails/{emailId}": {
+      "schema": { "$ref": "#/entities/CrmEmailLog" },
+      "description": "Admin-managed CRM email logs and activity timeline feed."
+    },
+    "/crmTasks/{taskId}": {
+      "schema": { "$ref": "#/entities/CrmTask" },
+      "description": "Admin-managed CRM follow-up task checklist."
     }
   }
 }

@@ -6,6 +6,8 @@ import {
   Clock,
   Copy,
   Download,
+  FileDown,
+  Loader2,
   Trash2,
   X,
 } from 'lucide-react';
@@ -17,6 +19,7 @@ import type { CalculatorPrefill } from './IncotermsCalculator';
 import { useLanguage } from '../i18n/LanguageContext';
 import { PRODUCT_FR } from '../i18n/translations';
 import { useBuyerAuth } from '../context/BuyerAuthContext';
+import { exportManifestQuotePdf } from '../utils/pdfQuoteGenerator';
 
 export interface ManifestLineItem {
   id: string;
@@ -112,6 +115,7 @@ export default function DealRoomModal({
   const [errors, setErrors] = useState<FormErrors>({});
   const [submittedRef, setSubmittedRef] = useState<string | null>(null);
   const [submittingRfq, setSubmittingRfq] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [copiedSummary, setCopiedSummary] = useState(false);
   const [activeTab, setActiveTab] = useState<'form' | 'history'>('form');
@@ -229,8 +233,9 @@ export default function DealRoomModal({
   const buildDossierText = (refId: string) => {
     const lines = [
       `============================================================`,
-      `AHZAN TECH LTD (INCORPORATING AHZANEMPORIUM)`,
-      `CAC RC 2012723 | MCO LICENCE 65197 EL | SCUML | FIRS TCC | NEPC`,
+      `AHZAN TECH LTD (ahzantechltd.com · B2B & MINERAL COMMAND)`,
+      `CAC RC 2012723 | MCO EL No. 65197 (Jega LGA, Kebbi State, Nigeria)`,
+      `ASSAYS: Zuma Gani ZMGN057 & Foshan Ceramics Q38625/H260715-164`,
       `B2B DEAL ROOM — FORMAL RFQ / LOI DOSSIER`,
       `============================================================`,
       `Reference ID:         ${refId}`,
@@ -360,6 +365,30 @@ export default function DealRoomModal({
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  const handleExportPdfQuote = async (overrideRef?: string) => {
+    if (exportingPdf) return;
+    setExportingPdf(true);
+    try {
+      await exportManifestQuotePdf({
+        refId: overrideRef || submittedRef || undefined,
+        companyName: form.companyName,
+        contactName: form.contactName,
+        corporateEmail: form.corporateEmail,
+        destinationPort: form.destinationPort,
+        incoterm: form.incoterm,
+        paymentTerms: form.paymentTerms,
+        specifications: form.specifications,
+        manifestItems,
+        singleProductId: form.productId,
+        singleVolume: form.targetVolume,
+        singleEstimatedTotalUsd: calculatorPrefill?.estimatedTotalUsd,
+        lang,
+      });
+    } finally {
+      setExportingPdf(false);
+    }
   };
 
   const handleReset = () => {
@@ -560,6 +589,28 @@ export default function DealRoomModal({
 
                   <button
                     type="button"
+                    disabled={exportingPdf}
+                    onClick={() => void handleExportPdfQuote(submittedRef)}
+                    className="inline-flex items-center gap-2 px-3.5 py-2.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 disabled:opacity-60 rounded-lg transition-colors cursor-pointer"
+                  >
+                    {exportingPdf ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
+                    ) : (
+                      <FileDown className="w-4 h-4 text-amber-400" />
+                    )}
+                    <span>
+                      {exportingPdf
+                        ? lang === 'fr'
+                          ? 'Génération PDF...'
+                          : 'Generating PDF...'
+                        : lang === 'fr'
+                          ? 'Devis Officiel PDF (Signé & Cacheté)'
+                          : 'Export Formal Quote PDF'}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={handleDownloadDossier}
                     className="inline-flex items-center gap-2 px-3.5 py-2.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
                   >
@@ -612,19 +663,37 @@ export default function DealRoomModal({
               {/* Active Multi-Line Manifest Summary (when populated) */}
               {hasManifest && (
                 <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-xs font-bold text-slate-900">
                       {t.dealRoom.manifestTitle} ({manifestItems.length})
                     </span>
-                    {onClearManifest && (
+                    <div className="flex items-center gap-3">
                       <button
                         type="button"
-                        onClick={onClearManifest}
-                        className="text-xs font-medium text-slate-500 hover:text-red-600 cursor-pointer"
+                        disabled={exportingPdf}
+                        onClick={() => void handleExportPdfQuote()}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 disabled:opacity-60 rounded-md transition-colors cursor-pointer"
                       >
-                        {t.dealRoom.clearManifest}
+                        {exportingPdf ? (
+                          <Loader2 className="w-3 h-3 animate-spin text-amber-400" />
+                        ) : (
+                          <FileDown className="w-3 h-3 text-amber-400" />
+                        )}
+                        <span>
+                          {lang === 'fr' ? 'Exporter Manifeste PDF' : 'Export Manifest PDF'}
+                        </span>
                       </button>
-                    )}
+
+                      {onClearManifest && (
+                        <button
+                          type="button"
+                          onClick={onClearManifest}
+                          className="text-xs font-medium text-slate-500 hover:text-red-600 cursor-pointer"
+                        >
+                          {t.dealRoom.clearManifest}
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div className="space-y-2">
                     {manifestItems.map((line) => (
@@ -901,13 +970,28 @@ export default function DealRoomModal({
 
               <div className="pt-3 border-t border-slate-200 flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-3">
                 <p className="text-xs text-slate-500">{t.dealRoom.footerNote}</p>
-                <div className="flex items-center justify-end gap-3">
+                <div className="flex flex-wrap items-center justify-end gap-2.5">
                   <button
                     type="button"
                     onClick={onClose}
-                    className="px-4 py-2.5 text-sm font-medium text-slate-700 hover:text-slate-900 cursor-pointer"
+                    className="px-3.5 py-2.5 text-sm font-medium text-slate-700 hover:text-slate-900 cursor-pointer"
                   >
                     {t.dealRoom.cancelBtn}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={exportingPdf}
+                    onClick={() => void handleExportPdfQuote()}
+                    className="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 disabled:opacity-60 rounded-lg transition-colors cursor-pointer"
+                  >
+                    {exportingPdf ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                    ) : (
+                      <FileDown className="w-3.5 h-3.5 text-amber-400" />
+                    )}
+                    <span>
+                      {lang === 'fr' ? 'Exporter Devis PDF' : 'Export Quote PDF'}
+                    </span>
                   </button>
                   <button
                     type="submit"
