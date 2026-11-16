@@ -788,7 +788,7 @@ export default function BuyerDashboardModal({
         <div className="px-5 sm:px-6 py-4 bg-slate-950 text-white flex items-center justify-between gap-4 shrink-0 border-b border-slate-800">
           <div className="flex items-center gap-3 min-w-0">
             <img
-              src="/assets/aistudio/IMG_2443_68d163ee.jpeg"
+              src="./assets/aistudio/IMG_2443_68d163ee.jpeg"
               alt="Ahzan Tech Ltd emblem"
               className="w-9 h-9 rounded-md bg-white p-0.5 object-contain shrink-0"
             />

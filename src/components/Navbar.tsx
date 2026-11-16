@@ -46,7 +46,7 @@ export default function Navbar({
           className="inline-flex items-center gap-2.5 font-display text-lg font-bold tracking-tight text-white whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded-sm"
         >
           <img
-            src="/assets/aistudio/IMG_2443_68d163ee.jpeg"
+            src="./assets/aistudio/IMG_2443_68d163ee.jpeg"
             alt="Ahzan Tech Ltd logo"
             className="w-8 h-8 rounded-md bg-white p-0.5 object-contain shrink-0"
           />

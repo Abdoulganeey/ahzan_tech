@@ -1,3 +1,8 @@
+import mineralLithiumImg from '../assets/images/mineral_lithium_ore_1794786070574.jpg';
+import agroSesameGingerImg from '../assets/images/agro_sesame_ginger_1794786072003.jpg';
+import industrialAutoImg from '../assets/images/industrial_auto_parts_1794786071653.jpg';
+import solarInverterImg from '../assets/images/solar_inverter_kit_1794786071188.jpg';
+
 export type ProductCategory =
   | 'Critical Minerals'
   | 'Agro-Commodities'
@@ -138,7 +143,7 @@ export const COMMODITY_PRODUCTS: CommodityProduct[] = [
     inspectionStandard: 'SGS / Bureau Veritas (ICP-OES & XRF)',
     minOrder: '50 MT (2 × 20ft FCL Trial) · Up to 5,000 MT/Mo',
     leadTime: '14–21 Days Post-L/C',
-    image: '/src/assets/images/mineral_lithium_ore_1794786070574.jpg',
+    image: mineralLithiumImg,
     summary:
       'Direct mine-gate sourcing of high-grade crushed lithium-bearing spodumene and lepidolite ore priced at $207 per 1% Li2O per metric ton under active Mining Cadastre tenure 65197 EL.',
     technicalSpecs: [
@@ -172,7 +177,7 @@ export const COMMODITY_PRODUCTS: CommodityProduct[] = [
     inspectionStandard: 'SGS / Bureau Veritas + NAQS Phytosanitary',
     minOrder: '18 MT (1 × 20ft FCL · $25,200)',
     leadTime: '15–25 Working Days',
-    image: '/src/assets/images/agro_sesame_ginger_1794786072003.jpg',
+    image: agroSesameGingerImg,
     summary:
       'Machine-cleaned 99/1 Nigerian whitish sesame seeds quoted at US$1,400/MT FOB Lagos (Apapa / Tin Can Island), prized for ≥50% oil yield and ≤2% free fatty acid profile.',
     technicalSpecs: [
@@ -204,7 +209,7 @@ export const COMMODITY_PRODUCTS: CommodityProduct[] = [
     inspectionStandard: 'SGS / Intertek + Phytosanitary Fumigation Cert',
     minOrder: '10 MT (14 MT / 20ft FCL · $19,040)',
     leadTime: '15–25 Working Days',
-    image: '/src/assets/images/agro_sesame_ginger_1794786072003.jpg',
+    image: agroSesameGingerImg,
     summary:
       'Export-grade Nigerian dried split ginger (US$1,360/MT FOB Lagos; whole ginger US$1,190/MT) and deep-red dried hibiscus calyces (US$1,740/MT FOB Lagos) tested to EU MRL standards.',
     technicalSpecs: [
@@ -236,7 +241,7 @@ export const COMMODITY_PRODUCTS: CommodityProduct[] = [
     inspectionStandard: 'SGS / Bureau Veritas Outturn Cutting Test',
     minOrder: '16 MT (16 MT / 20ft FCL · $17,680)',
     leadTime: '15–25 Working Days',
-    image: '/src/assets/images/agro_sesame_ginger_1794786072003.jpg',
+    image: agroSesameGingerImg,
     summary:
       'Direct origin Nigerian Raw Cashew Nuts at US$1,105/MT FOB Lagos, Processed W320 Kernels ($6,800/MT), Grade 1 Fermented Cocoa Beans ($3,638/MT), and Non-GMO Soybeans ($450/MT).',
     technicalSpecs: [
@@ -268,7 +273,7 @@ export const COMMODITY_PRODUCTS: CommodityProduct[] = [
     inspectionStandard: 'SONCAP / Intertek / API SL & CI-4 Certified',
     minOrder: '8 × 200L Drums or 1 × 20ft FCL (80 Drums)',
     leadTime: '20–30 Working Days',
-    image: '/src/assets/images/industrial_auto_parts_1794786071653.jpg',
+    image: industrialAutoImg,
     summary:
       'Official Kano & UEMOA wholesale distribution of API SL gasoline and CI-4 heavy-duty diesel engine oils in 1L, 4L, 5L, 20L barrels, and 200L steel drums priced in USD, NGN, and XOF.',
     technicalSpecs: [
@@ -300,7 +305,7 @@ export const COMMODITY_PRODUCTS: CommodityProduct[] = [
     inspectionStandard: 'CE / IEC / Bureau Veritas Pre-Shipment',
     minOrder: '6 Kits (20ft FCL) · 18 Kits (40ft HC)',
     leadTime: '10–18 Days Dispatch',
-    image: '/src/assets/images/solar_inverter_kit_1794786071188.jpg',
+    image: solarInverterImg,
     summary:
       'Turnkey commercial energy kits combining Tier-1 monocrystalline solar panels, pure-sine-wave hybrid MPPT inverters, and deep-cycle LiFePO4 battery banks for telecom, mining, and SME infrastructure.',
     technicalSpecs: [

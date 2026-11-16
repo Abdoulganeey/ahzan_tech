@@ -14,6 +14,7 @@ import {
 } from '../data/complianceRegistry';
 import { useLanguage } from '../i18n/LanguageContext';
 import { COMPLIANCE_BADGE_FR } from '../i18n/translations';
+import heroPortLogisticsImg from '../assets/images/hero_port_logistics_1794786070092.jpg';
 
 interface HeroProps {
   onOpenDealRoom: () => void;
@@ -55,7 +56,7 @@ export default function Hero({ onOpenDealRoom, onOpenBuyerDashboard }: HeroProps
       <div className="relative min-h-[600px] lg:min-h-[660px] flex items-center">
         <div className="absolute inset-0">
           <img
-            src="/src/assets/images/hero_port_logistics_1794786070092.jpg"
+            src={heroPortLogisticsImg}
             alt="International maritime container terminal and bulk mineral export port at golden hour"
             referrerPolicy="no-referrer"
             className="w-full h-full object-cover object-center"

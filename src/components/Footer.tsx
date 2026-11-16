@@ -10,7 +10,7 @@ export default function Footer() {
           <div className="md:col-span-5 space-y-3">
             <div className="inline-flex items-center gap-3">
               <img
-                src="/assets/aistudio/IMG_2443_68d163ee.jpeg"
+                src="./assets/aistudio/IMG_2443_68d163ee.jpeg"
                 alt="Ahzan Tech Ltd emblem"
                 className="w-9 h-9 rounded-md bg-white p-0.5 object-contain shrink-0"
               />

@@ -87,7 +87,7 @@ export default function PriceSchedulesSection({
           {/* Direct PDF Price List Downloads */}
           <div className="flex flex-wrap items-center gap-2.5 shrink-0">
             <a
-              href="/assets/aistudio/Ahzan_Tech_Ltd_Price_List_26b8dc48.pdf"
+              href="./assets/aistudio/Ahzan_Tech_Ltd_Price_List_26b8dc48.pdf"
               download="Ahzan_Tech_Ltd_Agro_Price_List_2026.pdf"
               className="inline-flex items-center gap-2 px-3.5 py-2.5 text-xs font-semibold text-slate-800 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg transition-colors whitespace-nowrap"
             >
@@ -98,7 +98,7 @@ export default function PriceSchedulesSection({
             </a>
 
             <a
-              href="/assets/aistudio/Ahzan_Tech_Lubricant_Official_Price_List_Kano_2026_ab828a2b.pdf"
+              href="./assets/aistudio/Ahzan_Tech_Lubricant_Official_Price_List_Kano_2026_ab828a2b.pdf"
               download="Ahzan_Tech_Lubricant_Price_List_Kano_2026.pdf"
               className="inline-flex items-center gap-2 px-3.5 py-2.5 text-xs font-semibold text-slate-800 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg transition-colors whitespace-nowrap"
             >
