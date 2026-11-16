@@ -68,6 +68,8 @@ import {
 export type RfqStatus =
   | 'Submitted'
   | 'Under Executive Review'
+  | 'Quote Approved'
+  | 'Not Approved'
   | 'SCO / Proforma Issued'
   | 'L/C Confirmed'
   | 'Export Cleared';
@@ -88,7 +90,32 @@ export type TradeDocType =
   | 'Form NXP / NESS Clearance'
   | TradeDocumentType;
 
-export type TradeDocStatus = 'Verified' | 'Pending Countersignature' | 'Archived';
+export type TradeDocStatus =
+  | 'Verified'
+  | 'Approved'
+  | 'Pending Review'
+  | 'Pending Countersignature'
+  | 'Not Approved'
+  | 'Archived';
+
+export type ReviewDecisionBucket = 'approved' | 'pending' | 'not_approved';
+
+export function getRfqReviewCategory(status: RfqStatus): ReviewDecisionBucket {
+  if (status === 'Not Approved') return 'not_approved';
+  if (status === 'Submitted' || status === 'Under Executive Review') return 'pending';
+  return 'approved';
+}
+
+export function getDocReviewCategory(
+  status: TradeDocStatus
+): ReviewDecisionBucket | 'archived' {
+  if (status === 'Archived') return 'archived';
+  if (status === 'Not Approved') return 'not_approved';
+  if (status === 'Pending Review' || status === 'Pending Countersignature') {
+    return 'pending';
+  }
+  return 'approved';
+}
 
 export type AlertCategory = 'Critical Minerals' | 'Agro-Commodities' | 'Lubricants';
 export type AlertTriggerDirection = 'below' | 'above' | 'pct_change';
@@ -147,6 +174,9 @@ export interface BuyerRfqDoc {
   validityDays?: number;
   specifications?: string;
   status: RfqStatus;
+  reviewNote?: string;
+  reviewedBy?: string;
+  reviewedAtMillis?: number;
   estimatedValueUsd?: number;
   createdAt?: Timestamp | null;
   updatedAt?: Timestamp | null;
@@ -189,6 +219,9 @@ export interface TradeDocumentDoc {
   issuer: string;
   issuedDate: string;
   status: TradeDocStatus;
+  reviewNote?: string;
+  reviewedBy?: string;
+  reviewedAtMillis?: number;
   incoterm?: IncotermCode;
   totalValue?: number;
   createdAtMillis?: number;
@@ -838,6 +871,11 @@ interface BuyerAuthContextValue {
   appendShipmentNote: (shipmentId: string, note: string) => Promise<void>;
   archiveTradeDocument: (docId: string) => Promise<void>;
   adminUpdateRfqStatus: (rfqId: string, status: RfqStatus) => Promise<void>;
+  adminReviewRfq: (
+    rfqId: string,
+    status: RfqStatus,
+    reviewNote?: string
+  ) => Promise<void>;
   adminUpdateRfq: (
     rfqId: string,
     updates: {
@@ -845,6 +883,7 @@ interface BuyerAuthContextValue {
       destinationPort: string;
       targetVolume: string;
       specifications: string;
+      reviewNote?: string;
       estimatedValueUsd?: number;
     }
   ) => Promise<void>;
@@ -873,11 +912,17 @@ interface BuyerAuthContextValue {
   adminDeleteShipment: (shipmentId: string) => Promise<void>;
   adminCreateTradeDocument: (input: AdminCreateTradeDocInput) => Promise<void>;
   adminVerifyTradeDocument: (docId: string) => Promise<void>;
+  adminReviewTradeDocument: (
+    docId: string,
+    status: TradeDocStatus,
+    reviewNote?: string
+  ) => Promise<void>;
   adminUpdateTradeDocument: (
     docId: string,
     updates: {
       status: TradeDocStatus;
       summaryText: string;
+      reviewNote?: string;
     }
   ) => Promise<void>;
   adminDeleteTradeDocument: (docId: string) => Promise<void>;
@@ -928,6 +973,7 @@ interface BuyerAuthContextValue {
     dueAtMillis: number;
   }) => Promise<void>;
   adminToggleTask: (taskId: string, isCompleted: boolean) => Promise<void>;
+  adminRescheduleTask: (taskId: string, dueAtMillis: number) => Promise<void>;
   adminDeleteTask: (taskId: string) => Promise<void>;
   adminImportAndroidRecords: (
     records: LithiumIntelRecord[],
@@ -1091,7 +1137,20 @@ export function BuyerAuthProvider({ children }: { children: ReactNode }) {
     const unsub = onAuthStateChanged(auth, (nextUser) => {
       setUser(nextUser);
       setAuthReady(true);
-      if (!nextUser) {
+      if (nextUser) {
+        void nextUser
+          .getIdToken()
+          .then((token) =>
+            fetch('/api/sql/me', {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            })
+          )
+          .catch(() => {
+            // Silent when running on static hosting or offline
+          });
+      } else {
         setProfile(null);
         setRfqs([]);
         setShipments([]);
@@ -1863,13 +1922,38 @@ export function BuyerAuthProvider({ children }: { children: ReactNode }) {
 
   // Admin RFQ, Shipment & Docs Actions
   const adminUpdateRfqStatus = async (rfqId: string, status: RfqStatus) => {
-    if (!isAdminUser) return;
+    if (!isAdminUser || !user) return;
     const docPath = `rfqs/${rfqId}`;
     try {
       await updateDoc(doc(db, 'rfqs', rfqId), {
         status,
+        reviewedBy: (user.email || 'Executive Admin').slice(0, 160),
+        reviewedAtMillis: Date.now(),
         updatedAt: serverTimestamp(),
       });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, docPath);
+    }
+  };
+
+  const adminReviewRfq = async (
+    rfqId: string,
+    status: RfqStatus,
+    reviewNote?: string
+  ) => {
+    if (!isAdminUser || !user) return;
+    const docPath = `rfqs/${rfqId}`;
+    const payload: Record<string, unknown> = {
+      status,
+      reviewedBy: (user.email || 'Executive Admin').slice(0, 160),
+      reviewedAtMillis: Date.now(),
+      updatedAt: serverTimestamp(),
+    };
+    if (typeof reviewNote === 'string') {
+      payload.reviewNote = reviewNote.trim().slice(0, 500);
+    }
+    try {
+      await updateDoc(doc(db, 'rfqs', rfqId), payload);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, docPath);
     }
@@ -1882,18 +1966,24 @@ export function BuyerAuthProvider({ children }: { children: ReactNode }) {
       destinationPort: string;
       targetVolume: string;
       specifications: string;
+      reviewNote?: string;
       estimatedValueUsd?: number;
     }
   ) => {
-    if (!isAdminUser) return;
+    if (!isAdminUser || !user) return;
     const docPath = `rfqs/${rfqId}`;
     const payload: Record<string, unknown> = {
       status: updates.status,
       destinationPort: updates.destinationPort.trim().slice(0, 120),
       targetVolume: updates.targetVolume.trim().slice(0, 120),
       specifications: updates.specifications.trim().slice(0, 1000),
+      reviewedBy: (user.email || 'Executive Admin').slice(0, 160),
+      reviewedAtMillis: Date.now(),
       updatedAt: serverTimestamp(),
     };
+    if (typeof updates.reviewNote === 'string') {
+      payload.reviewNote = updates.reviewNote.trim().slice(0, 500);
+    }
     if (
       typeof updates.estimatedValueUsd === 'number' &&
       Number.isFinite(updates.estimatedValueUsd) &&
@@ -2069,13 +2159,38 @@ export function BuyerAuthProvider({ children }: { children: ReactNode }) {
   };
 
   const adminVerifyTradeDocument = async (docId: string) => {
-    if (!isAdminUser) return;
+    if (!isAdminUser || !user) return;
     const docPath = `tradeDocuments/${docId}`;
     try {
       await updateDoc(doc(db, 'tradeDocuments', docId), {
         status: 'Verified' as TradeDocStatus,
+        reviewedBy: (user.email || 'Executive Admin').slice(0, 160),
+        reviewedAtMillis: Date.now(),
         updatedAt: serverTimestamp(),
       });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, docPath);
+    }
+  };
+
+  const adminReviewTradeDocument = async (
+    docId: string,
+    status: TradeDocStatus,
+    reviewNote?: string
+  ) => {
+    if (!isAdminUser || !user) return;
+    const docPath = `tradeDocuments/${docId}`;
+    const payload: Record<string, unknown> = {
+      status,
+      reviewedBy: (user.email || 'Executive Admin').slice(0, 160),
+      reviewedAtMillis: Date.now(),
+      updatedAt: serverTimestamp(),
+    };
+    if (typeof reviewNote === 'string') {
+      payload.reviewNote = reviewNote.trim().slice(0, 500);
+    }
+    try {
+      await updateDoc(doc(db, 'tradeDocuments', docId), payload);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, docPath);
     }
@@ -2086,16 +2201,23 @@ export function BuyerAuthProvider({ children }: { children: ReactNode }) {
     updates: {
       status: TradeDocStatus;
       summaryText: string;
+      reviewNote?: string;
     }
   ) => {
-    if (!isAdminUser) return;
+    if (!isAdminUser || !user) return;
     const docPath = `tradeDocuments/${docId}`;
+    const payload: Record<string, unknown> = {
+      status: updates.status,
+      summaryText: updates.summaryText.trim().slice(0, 1500),
+      reviewedBy: (user.email || 'Executive Admin').slice(0, 160),
+      reviewedAtMillis: Date.now(),
+      updatedAt: serverTimestamp(),
+    };
+    if (typeof updates.reviewNote === 'string') {
+      payload.reviewNote = updates.reviewNote.trim().slice(0, 500);
+    }
     try {
-      await updateDoc(doc(db, 'tradeDocuments', docId), {
-        status: updates.status,
-        summaryText: updates.summaryText.trim().slice(0, 1500),
-        updatedAt: serverTimestamp(),
-      });
+      await updateDoc(doc(db, 'tradeDocuments', docId), payload);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, docPath);
     }
@@ -2622,6 +2744,20 @@ export function BuyerAuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const adminRescheduleTask = async (taskId: string, dueAtMillis: number) => {
+    if (!isAdminUser) return;
+    const docPath = `crmTasks/${taskId}`;
+    try {
+      await updateDoc(doc(db, 'crmTasks', taskId), {
+        dueAtMillis: Math.max(0, Math.round(dueAtMillis)),
+        isCompleted: false,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, docPath);
+    }
+  };
+
   const adminDeleteTask = async (taskId: string) => {
     if (!isAdminUser) return;
     const docPath = `crmTasks/${taskId}`;
@@ -3112,6 +3248,8 @@ export function BuyerAuthProvider({ children }: { children: ReactNode }) {
         const stageMap: Record<RfqStatus, CrmLeadStage> = {
           Submitted: 'New Lead',
           'Under Executive Review': 'Qualified',
+          'Quote Approved': 'Proposal / SCO Sent',
+          'Not Approved': 'Lost / Archived',
           'SCO / Proforma Issued': 'Proposal / SCO Sent',
           'L/C Confirmed': 'Negotiation',
           'Export Cleared': 'Won / Contracted',
@@ -3276,6 +3414,7 @@ export function BuyerAuthProvider({ children }: { children: ReactNode }) {
         appendShipmentNote,
         archiveTradeDocument,
         adminUpdateRfqStatus,
+        adminReviewRfq,
         adminUpdateRfq,
         adminDeleteRfq,
         adminCreateShipment,
@@ -3284,6 +3423,7 @@ export function BuyerAuthProvider({ children }: { children: ReactNode }) {
         adminDeleteShipment,
         adminCreateTradeDocument,
         adminVerifyTradeDocument,
+        adminReviewTradeDocument,
         adminUpdateTradeDocument,
         adminDeleteTradeDocument,
         adminSaveMarketConfig,
@@ -3303,6 +3443,7 @@ export function BuyerAuthProvider({ children }: { children: ReactNode }) {
         adminLogActivity,
         adminCreateTask,
         adminToggleTask,
+        adminRescheduleTask,
         adminDeleteTask,
         adminImportAndroidRecords,
         adminImportCsvRecords,

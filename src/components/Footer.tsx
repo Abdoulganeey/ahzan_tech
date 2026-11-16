@@ -1,10 +1,17 @@
 import { useLanguage } from '../i18n/LanguageContext';
+import { useBuyerAuth } from '../context/BuyerAuthContext';
+import PWAInstallButton from './PWAInstallButton';
 
-export default function Footer() {
+interface FooterProps {
+  onOpenAdminPage?: () => void;
+}
+
+export default function Footer({ onOpenAdminPage }: FooterProps) {
   const { lang, t } = useLanguage();
+  const { isAdminUser } = useBuyerAuth();
 
   return (
-    <footer className="bg-slate-950 text-slate-400 border-t border-slate-800 py-12">
+    <footer className="bg-slate-950 text-slate-400 border-t border-slate-800 py-12 pb-24 md:pb-12">
       <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-8 pb-10 border-b border-slate-800/80">
           <div className="md:col-span-5 space-y-3">
@@ -24,6 +31,9 @@ export default function Footer() {
             <p className="font-mono text-xs text-slate-500">
               RC 2012723 · Mining Cadastre Licence No. 65197 EL · SCUML · FIRS TCC · NEPC
             </p>
+            <div className="pt-1">
+              <PWAInstallButton variant="header" label="Install Desktop / Mobile App" />
+            </div>
           </div>
 
           <div className="md:col-span-3 space-y-2.5">
@@ -61,6 +71,17 @@ export default function Footer() {
                   {lang === 'fr' ? 'Direction' : 'Executive Desk'}
                 </a>
               </li>
+              {onOpenAdminPage && isAdminUser && (
+                <li>
+                  <button
+                    type="button"
+                    onClick={onOpenAdminPage}
+                    className="text-amber-400 hover:text-amber-300 font-semibold transition-colors cursor-pointer"
+                  >
+                    Executive Admin Console →
+                  </button>
+                </li>
+              )}
             </ul>
           </div>
 

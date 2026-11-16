@@ -6,6 +6,7 @@ import {
   Check,
   CheckCircle2,
   ClipboardList,
+  Clock,
   Copy,
   Download,
   Edit3,
@@ -23,8 +24,11 @@ import {
   Ship,
   SlidersHorizontal,
   X,
+  XCircle,
 } from 'lucide-react';
 import {
+  getDocReviewCategory,
+  getRfqReviewCategory,
   useBuyerAuth,
   type BuyerRfqDoc,
   type BuyerShipmentDoc,
@@ -34,17 +38,18 @@ import {
 } from '../context/BuyerAuthContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import { exportManifestQuotePdf } from '../utils/pdfQuoteGenerator';
-import AdminWorkspacePanel from './AdminWorkspacePanel';
 
 interface BuyerDashboardModalProps {
   isOpen: boolean;
   onClose: () => void;
   onOpenNewRfq: () => void;
+  onOpenAdminPage: () => void;
 }
 
 const RFQ_STAGES: RfqStatus[] = [
   'Submitted',
   'Under Executive Review',
+  'Quote Approved',
   'SCO / Proforma Issued',
   'L/C Confirmed',
   'Export Cleared',
@@ -87,6 +92,7 @@ export default function BuyerDashboardModal({
   isOpen,
   onClose,
   onOpenNewRfq,
+  onOpenAdminPage,
 }: BuyerDashboardModalProps) {
   const { lang } = useLanguage();
   const {
@@ -120,8 +126,14 @@ export default function BuyerDashboardModal({
   const [activeTab, setActiveTab] = useState<'rfqs' | 'shipments' | 'documents'>(
     'rfqs'
   );
+  const [rfqReviewFilter, setRfqReviewFilter] = useState<
+    'all' | 'approved' | 'pending' | 'not_approved'
+  >('all');
   const [rfqFilter, setRfqFilter] = useState<'All' | RfqStatus>('All');
   const [docSearch, setDocSearch] = useState('');
+  const [docReviewFilter, setDocReviewFilter] = useState<
+    'all' | 'approved' | 'pending' | 'not_approved'
+  >('all');
   const [docTypeFilter, setDocTypeFilter] = useState('All');
   const [showArchivedDocs, setShowArchivedDocs] = useState(false);
   const [expandedDocId, setExpandedDocId] = useState<string | null>(null);
@@ -177,20 +189,62 @@ export default function BuyerDashboardModal({
   const activeDocsList =
     workspaceMode === 'admin' && isAdminUser ? allTradeDocuments : tradeDocuments;
 
+  const rfqCounts = useMemo(() => {
+    let approved = 0;
+    let pending = 0;
+    let notApproved = 0;
+    for (const r of activeRfqsList) {
+      const cat = getRfqReviewCategory(r.status);
+      if (cat === 'approved') approved++;
+      else if (cat === 'pending') pending++;
+      else notApproved++;
+    }
+    return { total: activeRfqsList.length, approved, pending, notApproved };
+  }, [activeRfqsList]);
+
   const filteredRfqs = useMemo(() => {
-    if (rfqFilter === 'All') return activeRfqsList;
-    return activeRfqsList.filter((item) => item.status === rfqFilter);
-  }, [activeRfqsList, rfqFilter]);
+    return activeRfqsList.filter((item) => {
+      if (rfqReviewFilter !== 'all' && getRfqReviewCategory(item.status) !== rfqReviewFilter) {
+        return false;
+      }
+      if (rfqFilter !== 'All' && item.status !== rfqFilter) return false;
+      return true;
+    });
+  }, [activeRfqsList, rfqFilter, rfqReviewFilter]);
 
   const docTypes = useMemo(() => {
     const types = Array.from(new Set(activeDocsList.map((d) => d.docType)));
     return ['All', ...types];
   }, [activeDocsList]);
 
+  const docCounts = useMemo(() => {
+    let approved = 0;
+    let pending = 0;
+    let notApproved = 0;
+    for (const d of activeDocsList) {
+      const cat = getDocReviewCategory(d.status);
+      if (cat === 'approved') approved++;
+      else if (cat === 'pending') pending++;
+      else if (cat === 'not_approved') notApproved++;
+    }
+    return {
+      total: activeDocsList.filter((d) => d.status !== 'Archived').length,
+      approved,
+      pending,
+      notApproved,
+    };
+  }, [activeDocsList]);
+
   const filteredDocs = useMemo(() => {
     const q = docSearch.trim().toLowerCase();
     return activeDocsList.filter((docItem) => {
       if (!showArchivedDocs && docItem.status === 'Archived') return false;
+      if (
+        docReviewFilter !== 'all' &&
+        getDocReviewCategory(docItem.status) !== docReviewFilter
+      ) {
+        return false;
+      }
       const matchesType =
         docTypeFilter === 'All' || docItem.docType === docTypeFilter;
       if (!matchesType) return false;
@@ -202,11 +256,12 @@ export default function BuyerDashboardModal({
         docItem.commodity.toLowerCase().includes(q)
       );
     });
-  }, [activeDocsList, docTypeFilter, docSearch, showArchivedDocs]);
+  }, [activeDocsList, docReviewFilter, docTypeFilter, docSearch, showArchivedDocs]);
 
   const pendingDocsCount = useMemo(
     () =>
-      activeDocsList.filter((d) => d.status === 'Pending Countersignature').length,
+      activeDocsList.filter((d) => getDocReviewCategory(d.status) === 'pending')
+        .length,
     [activeDocsList]
   );
 
@@ -304,6 +359,9 @@ export default function BuyerDashboardModal({
       `Document Type:   ${docItem.docType}`,
       `Title:           ${docItem.title}`,
       `Status:          ${docItem.status}`,
+      ...(docItem.reviewNote
+        ? [`Admin Review:    ${docItem.reviewNote}`]
+        : []),
       `Linked RFQ:      ${docItem.rfqRefId}`,
       `Commodity:       ${docItem.commodity}`,
       `Issuing Entity:  ${docItem.issuer}`,
@@ -366,6 +424,7 @@ export default function BuyerDashboardModal({
 
   const renderRfqCard = (rfq: BuyerRfqDoc) => {
     const stepIdx = getRfqStepIndex(rfq.status);
+    const reviewCategory = getRfqReviewCategory(rfq.status);
     const isEditing = editingRfqId === rfq.id;
     const canBuyerAmend =
       rfq.status !== 'Export Cleared' && rfq.buyerUid === user?.uid;
@@ -373,7 +432,13 @@ export default function BuyerDashboardModal({
     return (
       <div
         key={rfq.id}
-        className="p-5 bg-white border border-slate-200 rounded-xl space-y-4"
+        className={`p-5 bg-white border rounded-xl space-y-4 ${
+          reviewCategory === 'not_approved'
+            ? 'border-red-200'
+            : reviewCategory === 'approved'
+              ? 'border-emerald-200'
+              : 'border-slate-200'
+        }`}
       >
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -410,13 +475,33 @@ export default function BuyerDashboardModal({
           <div className="text-right shrink-0 space-y-1">
             <span
               className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-md border ${
-                rfq.status === 'L/C Confirmed' || rfq.status === 'Export Cleared'
-                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                  : 'bg-amber-50 text-amber-800 border-amber-200'
+                reviewCategory === 'approved'
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                  : reviewCategory === 'not_approved'
+                    ? 'bg-red-50 text-red-800 border-red-200'
+                    : 'bg-amber-50 text-amber-900 border-amber-200'
               }`}
             >
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>{rfq.status}</span>
+              {reviewCategory === 'approved' ? (
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              ) : reviewCategory === 'not_approved' ? (
+                <XCircle className="w-3.5 h-3.5 text-red-600 shrink-0" />
+              ) : (
+                <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              )}
+              <span>
+                {reviewCategory === 'approved'
+                  ? rfq.status === 'Quote Approved'
+                    ? lang === 'fr'
+                      ? 'Devis Approuvé'
+                      : 'Approved Quote'
+                    : `${lang === 'fr' ? 'Approuvé' : 'Approved'} · ${rfq.status}`
+                  : reviewCategory === 'not_approved'
+                    ? lang === 'fr'
+                      ? 'Non Approuvé (Après Examen)'
+                      : 'Not Approved (Admin Review)'
+                    : `${lang === 'fr' ? 'En Attente' : 'Pending Review'} · ${rfq.status}`}
+              </span>
             </span>
             {typeof rfq.estimatedValueUsd === 'number' && (
               <div className="font-mono text-xs font-semibold text-slate-700 tabular-nums">
@@ -425,6 +510,21 @@ export default function BuyerDashboardModal({
             )}
           </div>
         </div>
+
+        {rfq.reviewNote && (
+          <div
+            className={`px-3.5 py-2.5 rounded-lg border text-xs leading-relaxed ${
+              reviewCategory === 'not_approved'
+                ? 'bg-red-50/70 border-red-200 text-red-900'
+                : 'bg-emerald-50/50 border-emerald-200 text-emerald-950'
+            }`}
+          >
+            <span className="font-semibold">
+              {lang === 'fr' ? 'Note de révision Admin : ' : 'Executive Review Note: '}
+            </span>
+            <span>{rfq.reviewNote}</span>
+          </div>
+        )}
 
         <dl className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-slate-100 text-xs">
           <div>
@@ -528,32 +628,43 @@ export default function BuyerDashboardModal({
           </div>
         )}
 
-        {/* 5-Stage RFQ Progress Stepper */}
-        <div className="pt-1">
-          <div className="grid grid-cols-5 gap-1.5">
-            {RFQ_STAGES.map((stageName, idx) => {
-              const reached = idx <= stepIdx;
-              return (
-                <div key={stageName} className="space-y-1">
-                  <div
-                    className={`h-1.5 rounded-full ${
-                      reached ? 'bg-emerald-500' : 'bg-slate-200'
-                    }`}
-                  />
-                  <div
-                    className={`text-[10px] leading-tight truncate ${
-                      reached
-                        ? 'font-semibold text-slate-800'
-                        : 'text-slate-400'
-                    }`}
-                  >
-                    {stageName}
-                  </div>
-                </div>
-              );
-            })}
+        {/* RFQ Progress Stepper (or Not Approved Banner) */}
+        {reviewCategory === 'not_approved' ? (
+          <div className="px-3.5 py-2.5 bg-red-50 border border-red-200 rounded-lg text-xs text-red-900 flex items-center gap-2">
+            <XCircle className="w-4 h-4 text-red-600 shrink-0" />
+            <span>
+              {lang === 'fr'
+                ? 'Ce devis n’a pas été approuvé après révision. Utilisez « Modifier détails » pour soumettre une révision.'
+                : 'This quote was marked Not Approved after admin review. Use "Amend Details" to revise volume, pricing, or port requirements.'}
+            </span>
           </div>
-        </div>
+        ) : (
+          <div className="pt-1">
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 sm:gap-1.5">
+              {RFQ_STAGES.map((stageName, idx) => {
+                const reached = idx <= stepIdx;
+                return (
+                  <div key={stageName} className="space-y-1">
+                    <div
+                      className={`h-1.5 rounded-full ${
+                        reached ? 'bg-emerald-500' : 'bg-slate-200'
+                      }`}
+                    />
+                    <div
+                      className={`text-[10px] leading-tight truncate ${
+                        reached
+                          ? 'font-semibold text-slate-800'
+                          : 'text-slate-400'
+                      }`}
+                    >
+                      {stageName}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Action Row: Buyer Amend + Export Quote PDF + Executive Admin Status Switcher */}
         <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
@@ -866,34 +977,17 @@ export default function BuyerDashboardModal({
 
           <div className="flex items-center gap-2 shrink-0">
             {isAdminUser && (
-              <div
-                role="group"
-                aria-label="Workspace Role Switch"
-                className="inline-flex items-center p-0.5 bg-slate-900 border border-slate-700 rounded-md text-xs"
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenAdminPage();
+                }}
+                className="min-h-[36px] inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-950 bg-emerald-400 hover:bg-emerald-300 rounded-md transition-colors cursor-pointer whitespace-nowrap"
               >
-                <button
-                  type="button"
-                  onClick={() => setWorkspaceMode('buyer')}
-                  className={`px-2.5 py-1 font-semibold rounded transition-colors cursor-pointer whitespace-nowrap ${
-                    workspaceMode === 'buyer'
-                      ? 'bg-amber-500 text-slate-950'
-                      : 'text-slate-300 hover:text-white'
-                  }`}
-                >
-                  My View
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setWorkspaceMode('admin')}
-                  className={`px-2.5 py-1 font-semibold rounded transition-colors cursor-pointer whitespace-nowrap ${
-                    workspaceMode === 'admin'
-                      ? 'bg-emerald-500 text-slate-950'
-                      : 'text-slate-300 hover:text-white'
-                  }`}
-                >
-                  Executive Admin
-                </button>
-              </div>
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>Open Admin Page</span>
+              </button>
             )}
 
             {user && (
@@ -1239,11 +1333,30 @@ export default function BuyerDashboardModal({
                 </div>
               )}
 
-              {workspaceMode === 'admin' && isAdminUser ? (
-                <AdminWorkspacePanel />
-              ) : (
-                <>
-                  {/* 3-Column KPI Summary */}
+              {isAdminUser && (
+                <div className="p-3.5 bg-slate-900 text-white border border-slate-800 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="space-y-0.5 text-xs">
+                    <div className="font-semibold text-emerald-400">
+                      Executive Admin Console Available
+                    </div>
+                    <p className="text-slate-300">
+                      Manage 249+ Trade Book leads, Google Drive Vault, and live Android CRM sync in the full-screen Admin page.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onOpenAdminPage();
+                    }}
+                    className="min-h-[40px] px-4 py-2 text-xs font-semibold text-slate-950 bg-amber-500 hover:bg-amber-400 rounded-md cursor-pointer whitespace-nowrap shrink-0"
+                  >
+                    Launch Full-Page Admin
+                  </button>
+                </div>
+              )}
+
+              {/* 3-Column KPI Summary */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <button
                       type="button"
@@ -1341,9 +1454,98 @@ export default function BuyerDashboardModal({
                   {/* Tab 1: Active RFQs */}
                   {activeTab === 'rfqs' && (
                     <div className="space-y-4">
+                      {/* Review Category Filter Strip (Approved Quote vs Pending vs Not Approved) */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRfqReviewFilter('all');
+                            setRfqFilter('All');
+                          }}
+                          className={`p-3 text-left rounded-lg border transition-colors cursor-pointer ${
+                            rfqReviewFilter === 'all'
+                              ? 'bg-slate-900 text-white border-slate-900'
+                              : 'bg-white text-slate-900 border-slate-200 hover:border-slate-300'
+                          }`}
+                        >
+                          <div className="text-[11px] font-medium opacity-75">
+                            {lang === 'fr' ? 'Tous les Devis' : 'All Quotes'}
+                          </div>
+                          <div className="font-mono text-lg font-bold tabular-nums">
+                            {rfqCounts.total}
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRfqReviewFilter('approved');
+                            setRfqFilter('All');
+                          }}
+                          className={`p-3 text-left rounded-lg border transition-colors cursor-pointer ${
+                            rfqReviewFilter === 'approved'
+                              ? 'bg-emerald-700 text-white border-emerald-700'
+                              : 'bg-emerald-50/70 text-emerald-950 border-emerald-200 hover:border-emerald-300'
+                          }`}
+                        >
+                          <div className="text-[11px] font-semibold flex items-center gap-1">
+                            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                            <span>
+                              {lang === 'fr' ? 'Devis Approuvés' : 'Approved Quotes'}
+                            </span>
+                          </div>
+                          <div className="font-mono text-lg font-bold tabular-nums">
+                            {rfqCounts.approved}
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRfqReviewFilter('pending');
+                            setRfqFilter('All');
+                          }}
+                          className={`p-3 text-left rounded-lg border transition-colors cursor-pointer ${
+                            rfqReviewFilter === 'pending'
+                              ? 'bg-amber-600 text-white border-amber-600'
+                              : 'bg-amber-50/70 text-amber-950 border-amber-200 hover:border-amber-300'
+                          }`}
+                        >
+                          <div className="text-[11px] font-semibold flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5 shrink-0" />
+                            <span>
+                              {lang === 'fr' ? 'En Attente' : 'Pending Review'}
+                            </span>
+                          </div>
+                          <div className="font-mono text-lg font-bold tabular-nums">
+                            {rfqCounts.pending}
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRfqReviewFilter('not_approved');
+                            setRfqFilter('All');
+                          }}
+                          className={`p-3 text-left rounded-lg border transition-colors cursor-pointer ${
+                            rfqReviewFilter === 'not_approved'
+                              ? 'bg-red-700 text-white border-red-700'
+                              : 'bg-red-50/70 text-red-950 border-red-200 hover:border-red-300'
+                          }`}
+                        >
+                          <div className="text-[11px] font-semibold flex items-center gap-1">
+                            <XCircle className="w-3.5 h-3.5 shrink-0" />
+                            <span>
+                              {lang === 'fr' ? 'Non Approuvés' : 'Not Approved'}
+                            </span>
+                          </div>
+                          <div className="font-mono text-lg font-bold tabular-nums">
+                            {rfqCounts.notApproved}
+                          </div>
+                        </button>
+                      </div>
+
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <div className="flex flex-wrap items-center gap-1.5">
-                          {(['All', ...RFQ_STAGES] as const).map((status) => (
+                          {(['All', ...RFQ_STAGES, 'Not Approved'] as const).map((status) => (
                             <button
                               key={status}
                               type="button"
@@ -1356,8 +1558,8 @@ export default function BuyerDashboardModal({
                             >
                               {status === 'All'
                                 ? lang === 'fr'
-                                  ? 'Tous'
-                                  : 'All RFQs'
+                                  ? 'Tous les stades'
+                                  : 'All Stages'
                                 : status}
                             </button>
                           ))}
@@ -1410,6 +1612,83 @@ export default function BuyerDashboardModal({
                   {/* Tab 3: Historical Trade Documents */}
                   {activeTab === 'documents' && (
                     <div className="space-y-4">
+                      {/* Document Review Status Differentiation Strip */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                        <button
+                          type="button"
+                          onClick={() => setDocReviewFilter('all')}
+                          className={`p-3 text-left rounded-lg border transition-colors cursor-pointer ${
+                            docReviewFilter === 'all'
+                              ? 'bg-slate-900 text-white border-slate-900'
+                              : 'bg-white text-slate-900 border-slate-200 hover:border-slate-300'
+                          }`}
+                        >
+                          <div className="text-[11px] font-medium opacity-75">
+                            {lang === 'fr' ? 'Tous Documents' : 'All Documents'}
+                          </div>
+                          <div className="font-mono text-lg font-bold tabular-nums">
+                            {docCounts.total}
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDocReviewFilter('approved')}
+                          className={`p-3 text-left rounded-lg border transition-colors cursor-pointer ${
+                            docReviewFilter === 'approved'
+                              ? 'bg-emerald-700 text-white border-emerald-700'
+                              : 'bg-emerald-50/70 text-emerald-950 border-emerald-200 hover:border-emerald-300'
+                          }`}
+                        >
+                          <div className="text-[11px] font-semibold flex items-center gap-1">
+                            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                            <span>
+                              {lang === 'fr' ? 'Approuvés / Vérifiés' : 'Approved / Verified'}
+                            </span>
+                          </div>
+                          <div className="font-mono text-lg font-bold tabular-nums">
+                            {docCounts.approved}
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDocReviewFilter('pending')}
+                          className={`p-3 text-left rounded-lg border transition-colors cursor-pointer ${
+                            docReviewFilter === 'pending'
+                              ? 'bg-amber-600 text-white border-amber-600'
+                              : 'bg-amber-50/70 text-amber-950 border-amber-200 hover:border-amber-300'
+                          }`}
+                        >
+                          <div className="text-[11px] font-semibold flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5 shrink-0" />
+                            <span>
+                              {lang === 'fr' ? 'En Attente' : 'Pending Review'}
+                            </span>
+                          </div>
+                          <div className="font-mono text-lg font-bold tabular-nums">
+                            {docCounts.pending}
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDocReviewFilter('not_approved')}
+                          className={`p-3 text-left rounded-lg border transition-colors cursor-pointer ${
+                            docReviewFilter === 'not_approved'
+                              ? 'bg-red-700 text-white border-red-700'
+                              : 'bg-red-50/70 text-red-950 border-red-200 hover:border-red-300'
+                          }`}
+                        >
+                          <div className="text-[11px] font-semibold flex items-center gap-1">
+                            <XCircle className="w-3.5 h-3.5 shrink-0" />
+                            <span>
+                              {lang === 'fr' ? 'Non Approuvés' : 'Not Approved'}
+                            </span>
+                          </div>
+                          <div className="font-mono text-lg font-bold tabular-nums">
+                            {docCounts.notApproved}
+                          </div>
+                        </button>
+                      </div>
+
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                         <div className="flex flex-wrap items-center gap-1.5">
                           {docTypes.map((typeName) => (
@@ -1470,6 +1749,7 @@ export default function BuyerDashboardModal({
                         <div className="bg-white border border-slate-200 rounded-xl divide-y divide-slate-200">
                           {filteredDocs.map((docItem) => {
                             const isExpanded = expandedDocId === docItem.id;
+                            const docCategory = getDocReviewCategory(docItem.status);
                             return (
                               <div key={docItem.id} className="p-4 sm:p-5">
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -1490,27 +1770,37 @@ export default function BuyerDashboardModal({
                                     <h4 className="font-display text-sm sm:text-base font-bold text-slate-900">
                                       {docItem.title}
                                     </h4>
-                                    <p className="text-xs text-slate-500">
-                                      {docItem.issuer} · RFQ {docItem.rfqRefId} ·{' '}
+                                    <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                                      <span>
+                                        {docItem.issuer} · RFQ {docItem.rfqRefId}
+                                      </span>
                                       <span
-                                        className={`font-semibold ${
-                                          docItem.status === 'Verified'
-                                            ? 'text-emerald-700'
-                                            : docItem.status === 'Archived'
-                                              ? 'text-slate-500'
-                                              : 'text-amber-700'
+                                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded font-semibold border ${
+                                          docCategory === 'approved'
+                                            ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                            : docCategory === 'not_approved'
+                                              ? 'bg-red-50 text-red-800 border-red-200'
+                                              : docCategory === 'pending'
+                                                ? 'bg-amber-50 text-amber-900 border-amber-200'
+                                                : 'bg-slate-100 text-slate-600 border-slate-200'
                                         }`}
                                       >
-                                        {docItem.status}
+                                        {docCategory === 'approved' ? (
+                                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                        ) : docCategory === 'not_approved' ? (
+                                          <XCircle className="w-3 h-3 text-red-600" />
+                                        ) : docCategory === 'pending' ? (
+                                          <Clock className="w-3 h-3 text-amber-600" />
+                                        ) : null}
+                                        <span>{docItem.status}</span>
                                       </span>
-                                    </p>
+                                    </div>
                                   </div>
 
                                   <div className="flex flex-wrap items-center gap-2 shrink-0">
                                     {workspaceMode === 'admin' &&
                                       isAdminUser &&
-                                      docItem.status ===
-                                        'Pending Countersignature' && (
+                                      docCategory === 'pending' && (
                                         <button
                                           type="button"
                                           onClick={() =>
@@ -1571,6 +1861,21 @@ export default function BuyerDashboardModal({
                                   </div>
                                 </div>
 
+                                {docItem.reviewNote && (
+                                  <div
+                                    className={`mt-2.5 px-3 py-2 rounded-lg border text-xs ${
+                                      docCategory === 'not_approved'
+                                        ? 'bg-red-50/70 border-red-200 text-red-900'
+                                        : 'bg-slate-50 border-slate-200 text-slate-700'
+                                    }`}
+                                  >
+                                    <span className="font-semibold">
+                                      {lang === 'fr' ? 'Note Admin : ' : 'Admin Review Note: '}
+                                    </span>
+                                    <span>{docItem.reviewNote}</span>
+                                  </div>
+                                )}
+
                                 {isExpanded && (
                                   <div className="mt-3 p-3.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 leading-relaxed">
                                     <div className="font-semibold text-slate-900 mb-1">
@@ -1586,8 +1891,6 @@ export default function BuyerDashboardModal({
                       )}
                     </div>
                   )}
-                </>
-              )}
                 </>
               )}
             </div>

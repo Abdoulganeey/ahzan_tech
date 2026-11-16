@@ -10,6 +10,7 @@ import {
   Check,
   CheckCircle2,
   ClipboardList,
+  Clock,
   Copy,
   Database,
   DollarSign,
@@ -19,6 +20,7 @@ import {
   FileDown,
   FileText,
   Globe2,
+  HardDrive,
   Landmark,
   Loader2,
   Mail,
@@ -32,10 +34,13 @@ import {
   Smartphone,
   Trash2,
   Users,
+  XCircle,
 } from 'lucide-react';
 import firebaseConfig from '../../firebase-applet-config.json';
 import {
   DEFAULT_MARKET_CONFIG,
+  getDocReviewCategory,
+  getRfqReviewCategory,
   useBuyerAuth,
   type BuyerRfqDoc,
   type BuyerShipmentDoc,
@@ -53,6 +58,7 @@ import {
   exportSchedulePdf,
 } from '../utils/pdfQuoteGenerator';
 import AdminSyncDrawer from './admin/AdminSyncDrawer';
+import AndroidFieldCompanion from './admin/AndroidFieldCompanion';
 import AndroidSyncBridgeDrawer from './admin/AndroidSyncBridgeDrawer';
 import CrmContactsDirectory from './admin/CrmContactsDirectory';
 import CrmEmailDesk from './admin/CrmEmailDesk';
@@ -62,16 +68,19 @@ import CrmLeadsWorkspace, {
 } from './admin/CrmLeadsWorkspace';
 import DuplicateAuditBadge from './admin/DuplicateAuditBadge';
 import GeoHeatmapView from './admin/GeoHeatmapView';
+import GoogleDriveVaultPanel from './admin/GoogleDriveVaultPanel';
 import InvestorsFinanceHub from './admin/InvestorsFinanceHub';
 import LeadDetailDrawer from './admin/LeadDetailDrawer';
 import TradeDocumentStudio from './admin/TradeDocumentStudio';
 
 type AdminSubTab =
   | 'overview'
+  | 'field-companion'
   | 'crm-leads'
   | 'geo-heatmap'
   | 'investors-hub'
   | 'doc-studio'
+  | 'drive-vault'
   | 'android-bridge'
   | 'crm-emails'
   | 'crm-contacts'
@@ -84,9 +93,11 @@ type AdminSubTab =
 const RFQ_STAGES: RfqStatus[] = [
   'Submitted',
   'Under Executive Review',
+  'Quote Approved',
   'SCO / Proforma Issued',
   'L/C Confirmed',
   'Export Cleared',
+  'Not Approved',
 ];
 
 const SHIPMENT_STAGES: Array<{
@@ -110,8 +121,11 @@ const TRADE_DOC_TYPES: TradeDocType[] = [
 ];
 
 const TRADE_DOC_STATUSES: TradeDocStatus[] = [
-  'Verified',
+  'Pending Review',
   'Pending Countersignature',
+  'Approved',
+  'Verified',
+  'Not Approved',
   'Archived',
 ];
 
@@ -145,13 +159,14 @@ export default function AdminWorkspacePanel() {
     canonicalProfile,
     marketConfig,
     lastSyncedAt,
+    adminReviewRfq,
     adminUpdateRfq,
     adminDeleteRfq,
     adminCreateShipment,
     adminUpdateShipmentDetails,
     adminDeleteShipment,
     adminCreateTradeDocument,
-    adminVerifyTradeDocument,
+    adminReviewTradeDocument,
     adminUpdateTradeDocument,
     adminDeleteTradeDocument,
     adminSaveMarketConfig,
@@ -218,6 +233,9 @@ export default function AdminWorkspacePanel() {
 
   // RFQ Admin State
   const [rfqQuery, setRfqQuery] = useState('');
+  const [rfqReviewBucket, setRfqReviewBucket] = useState<
+    'all' | 'approved' | 'pending' | 'not_approved'
+  >('all');
   const [rfqStatusFilter, setRfqStatusFilter] = useState<'All' | RfqStatus>('All');
   const [editingRfqId, setEditingRfqId] = useState<string | null>(null);
   const [rfqEditDraft, setRfqEditDraft] = useState<{
@@ -226,14 +244,19 @@ export default function AdminWorkspacePanel() {
     targetVolume: string;
     estimatedValueUsd: string;
     specifications: string;
+    reviewNote: string;
   }>({
     status: 'Submitted',
     destinationPort: '',
     targetVolume: '',
     estimatedValueUsd: '',
     specifications: '',
+    reviewNote: '',
   });
   const [savingRfqId, setSavingRfqId] = useState<string | null>(null);
+  const [reviewingRfqId, setReviewingRfqId] = useState<string | null>(null);
+  const [rfqReviewNoteDraft, setRfqReviewNoteDraft] = useState('');
+  const [savingRfqReviewId, setSavingRfqReviewId] = useState<string | null>(null);
   const [exportingPdfId, setExportingPdfId] = useState<string | null>(null);
 
   // Shipment Admin State
@@ -283,12 +306,20 @@ export default function AdminWorkspacePanel() {
       'Formal export documentation issued under RC 2012723 and MCO Licence 65197 EL, subject to SGS pre-shipment inspection and ICC Incoterms 2020.',
   });
   const [creatingDoc, setCreatingDoc] = useState(false);
+  const [docReviewBucket, setDocReviewBucket] = useState<
+    'all' | 'approved' | 'pending' | 'not_approved' | 'archived'
+  >('all');
+  const [docQuery, setDocQuery] = useState('');
   const [editingDocId, setEditingDocId] = useState<string | null>(null);
   const [docEditDraft, setDocEditDraft] = useState({
     status: 'Verified' as TradeDocStatus,
     summaryText: '',
+    reviewNote: '',
   });
   const [savingDocId, setSavingDocId] = useState<string | null>(null);
+  const [reviewingDocId, setReviewingDocId] = useState<string | null>(null);
+  const [docReviewNoteDraft, setDocReviewNoteDraft] = useState('');
+  const [savingDocReviewId, setSavingDocReviewId] = useState<string | null>(null);
 
   // Alerts Admin State
   const [alertCategoryFilter, setAlertCategoryFilter] = useState('All');
@@ -393,10 +424,44 @@ export default function AdminWorkspacePanel() {
 
   const pendingDocsCount = useMemo(
     () =>
-      allTradeDocuments.filter((d) => d.status === 'Pending Countersignature')
+      allTradeDocuments.filter((d) => getDocReviewCategory(d.status) === 'pending')
         .length,
     [allTradeDocuments]
   );
+
+  const rfqReviewCounts = useMemo(() => {
+    let approved = 0;
+    let pending = 0;
+    let notApproved = 0;
+    for (const r of allRfqs) {
+      const cat = getRfqReviewCategory(r.status);
+      if (cat === 'approved') approved++;
+      else if (cat === 'pending') pending++;
+      else notApproved++;
+    }
+    return { total: allRfqs.length, approved, pending, notApproved };
+  }, [allRfqs]);
+
+  const docReviewCounts = useMemo(() => {
+    let approved = 0;
+    let pending = 0;
+    let notApproved = 0;
+    let archived = 0;
+    for (const d of allTradeDocuments) {
+      const cat = getDocReviewCategory(d.status);
+      if (cat === 'approved') approved++;
+      else if (cat === 'pending') pending++;
+      else if (cat === 'not_approved') notApproved++;
+      else archived++;
+    }
+    return {
+      total: allTradeDocuments.length,
+      approved,
+      pending,
+      notApproved,
+      archived,
+    };
+  }, [allTradeDocuments]);
 
   const knownBuyers = useMemo(() => {
     const map = new Map<string, string>();
@@ -414,6 +479,9 @@ export default function AdminWorkspacePanel() {
   const filteredRfqs = useMemo(() => {
     const q = rfqQuery.trim().toLowerCase();
     return allRfqs.filter((r) => {
+      if (rfqReviewBucket !== 'all' && getRfqReviewCategory(r.status) !== rfqReviewBucket) {
+        return false;
+      }
       if (rfqStatusFilter !== 'All' && r.status !== rfqStatusFilter) return false;
       if (!q) return true;
       return (
@@ -424,7 +492,24 @@ export default function AdminWorkspacePanel() {
         r.destinationPort.toLowerCase().includes(q)
       );
     });
-  }, [allRfqs, rfqQuery, rfqStatusFilter]);
+  }, [allRfqs, rfqQuery, rfqReviewBucket, rfqStatusFilter]);
+
+  const filteredTradeDocs = useMemo(() => {
+    const q = docQuery.trim().toLowerCase();
+    return allTradeDocuments.filter((d) => {
+      if (docReviewBucket !== 'all' && getDocReviewCategory(d.status) !== docReviewBucket) {
+        return false;
+      }
+      if (!q) return true;
+      return (
+        d.docCode.toLowerCase().includes(q) ||
+        d.title.toLowerCase().includes(q) ||
+        d.rfqRefId.toLowerCase().includes(q) ||
+        d.commodity.toLowerCase().includes(q) ||
+        d.issuer.toLowerCase().includes(q)
+      );
+    });
+  }, [allTradeDocuments, docQuery, docReviewBucket]);
 
   const filteredAlerts = useMemo(() => {
     return allPriceAlerts.filter((a) => {
@@ -481,6 +566,12 @@ export default function AdminWorkspacePanel() {
       groupLabel: 'Command Center',
       items: [
         { id: 'overview', label: 'Overview & Sync', icon: Database },
+        {
+          id: 'field-companion',
+          label: 'Field Companion & Tasks',
+          count: kpiSummary.openTasksCount,
+          icon: CalendarClock,
+        },
         { id: 'geo-heatmap', label: 'Europe & APAC Heatmap', count: 14, icon: Globe2 },
         { id: 'investors-hub', label: 'Investors & Grants', count: fundingCount, icon: Landmark },
       ],
@@ -530,6 +621,11 @@ export default function AdminWorkspacePanel() {
           label: 'Trade Vault',
           count: allTradeDocuments.length,
           icon: FileCheck2,
+        },
+        {
+          id: 'drive-vault',
+          label: 'Google Drive Vault',
+          icon: HardDrive,
         },
         {
           id: 'alerts',
@@ -595,6 +691,7 @@ export default function AdminWorkspacePanel() {
       estimatedValueUsd:
         typeof rfq.estimatedValueUsd === 'number' ? String(rfq.estimatedValueUsd) : '',
       specifications: rfq.specifications || '',
+      reviewNote: rfq.reviewNote || '',
     });
   };
 
@@ -610,6 +707,7 @@ export default function AdminWorkspacePanel() {
         destinationPort: rfqEditDraft.destinationPort,
         targetVolume: rfqEditDraft.targetVolume,
         specifications: rfqEditDraft.specifications,
+        reviewNote: rfqEditDraft.reviewNote,
         estimatedValueUsd: Number.isFinite(parsedVal) ? parsedVal : undefined,
       });
       setEditingRfqId(null);
@@ -618,6 +716,25 @@ export default function AdminWorkspacePanel() {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to update RFQ.');
     } finally {
       setSavingRfqId(null);
+    }
+  };
+
+  const handleRfqReviewDecision = async (
+    rfq: BuyerRfqDoc,
+    nextStatus: RfqStatus,
+    note?: string
+  ) => {
+    setSavingRfqReviewId(rfq.id);
+    setErrorMsg(null);
+    try {
+      await adminReviewRfq(rfq.id, nextStatus, note);
+      setReviewingRfqId(null);
+      setRfqReviewNoteDraft('');
+      notify(`Quote ${rfq.refId} updated to "${nextStatus}".`);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Unable to save quote review.');
+    } finally {
+      setSavingRfqReviewId(null);
     }
   };
 
@@ -712,6 +829,7 @@ export default function AdminWorkspacePanel() {
     setDocEditDraft({
       status: d.status,
       summaryText: d.summaryText,
+      reviewNote: d.reviewNote || '',
     });
   };
 
@@ -726,6 +844,25 @@ export default function AdminWorkspacePanel() {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to update document.');
     } finally {
       setSavingDocId(null);
+    }
+  };
+
+  const handleDocReviewDecision = async (
+    docItem: TradeDocumentDoc,
+    nextStatus: TradeDocStatus,
+    note?: string
+  ) => {
+    setSavingDocReviewId(docItem.id);
+    setErrorMsg(null);
+    try {
+      await adminReviewTradeDocument(docItem.id, nextStatus, note);
+      setReviewingDocId(null);
+      setDocReviewNoteDraft('');
+      notify(`Document ${docItem.docCode} marked "${nextStatus}".`);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Unable to save document review.');
+    } finally {
+      setSavingDocReviewId(null);
     }
   };
 
@@ -937,11 +1074,11 @@ export default function AdminWorkspacePanel() {
         </div>
       )}
 
-      {/* Responsive Mobile/Tablet Horizontal Navigation (< lg) */}
+      {/* Mobile & Tablet Horizontal Scrollable Touch Strip */}
       <div
         role="tablist"
-        aria-label="Command Center Sections Mobile"
-        className="lg:hidden flex flex-wrap items-center gap-1.5 p-1.5 bg-slate-200/70 border border-slate-300/80 rounded-lg"
+        aria-label="Command Center Sections"
+        className="lg:hidden flex items-center gap-1.5 p-1.5 bg-slate-200/70 border border-slate-300/80 rounded-lg overflow-x-auto"
       >
         {navGroups
           .flatMap((g) => g.items)
@@ -955,7 +1092,7 @@ export default function AdminWorkspacePanel() {
                 role="tab"
                 aria-selected={active}
                 onClick={() => setSubTab(item.id)}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-md cursor-pointer whitespace-nowrap ${
+                className={`min-h-[44px] inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-md cursor-pointer whitespace-nowrap shrink-0 transition-colors ${
                   active
                     ? 'bg-slate-950 text-white'
                     : 'text-slate-700 hover:bg-white/80'
@@ -968,7 +1105,7 @@ export default function AdminWorkspacePanel() {
                 />
                 <span>{item.label}</span>
                 {typeof item.count === 'number' && (
-                  <span className="font-mono text-[11px] opacity-80">
+                  <span className="font-mono text-[11px] opacity-80 tabular-nums">
                     ({item.count})
                   </span>
                 )}
@@ -977,11 +1114,43 @@ export default function AdminWorkspacePanel() {
           })}
       </div>
 
+      {/* Mobile Bottom Thumb Quick-Navigation Bar (Android & iOS Friendly) */}
+      <nav
+        aria-label="Mobile Quick Navigation"
+        className="lg:hidden fixed bottom-0 left-0 right-0 z-30 h-14 bg-slate-950/95 backdrop-blur-md border-t border-slate-800 grid grid-cols-5 items-center px-1"
+      >
+        {(
+          [
+            { id: 'overview', label: 'Home', icon: Activity },
+            { id: 'field-companion', label: 'Tasks', icon: CalendarClock },
+            { id: 'crm-leads', label: 'Leads', icon: Briefcase },
+            { id: 'drive-vault', label: 'Drive', icon: HardDrive },
+            { id: 'rfqs', label: 'RFQs', icon: ClipboardList },
+          ] as const
+        ).map((quick) => {
+          const QIcon = quick.icon;
+          const active = subTab === quick.id;
+          return (
+            <button
+              key={quick.id}
+              type="button"
+              onClick={() => setSubTab(quick.id)}
+              className={`min-h-[44px] flex flex-col items-center justify-center gap-0.5 text-[10px] font-medium cursor-pointer transition-colors ${
+                active ? 'text-amber-400' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <QIcon className="w-4 h-4" />
+              <span className="truncate">{quick.label}</span>
+            </button>
+          );
+        })}
+      </nav>
+
       {/* Desktop 240px Sidebar + Fluid Workspace Canvas */}
       <div className="flex flex-col lg:flex-row gap-5 items-start">
         <aside
           aria-label="Executive Command Center Navigation"
-          className="hidden lg:flex flex-col w-60 shrink-0 bg-white border border-slate-200 rounded-lg p-3 space-y-4 sticky top-0"
+          className="hidden lg:flex flex-col w-60 shrink-0 bg-white border border-slate-200 rounded-lg p-3 space-y-4 sticky top-20"
         >
           {navGroups.map((group) => (
             <div key={group.groupLabel} className="space-y-1">
@@ -1292,6 +1461,18 @@ export default function AdminWorkspacePanel() {
             </div>
           )}
 
+          {/* 1b. ANDROID FIELD COMPANION & FOLLOW-UP TASKS DECK */}
+          {subTab === 'field-companion' && (
+            <AndroidFieldCompanion
+              onSelectLead={(rec) => setSelectedIntelRankId(rec.rankId)}
+              onOpenEmailComposer={handleOpenEmailFromWorkspace}
+              onOpenInDocStudio={handleOpenInDocStudio}
+              onOpenSyncDrawer={() => setSyncDrawerOpen(true)}
+              onNotify={notify}
+              onError={setErrorMsg}
+            />
+          )}
+
           {/* 2. CRM LEADS & PIPELINE */}
           {subTab === 'crm-leads' && (
             <CrmLeadsWorkspace
@@ -1332,6 +1513,11 @@ export default function AdminWorkspacePanel() {
               onNotify={notify}
               onError={setErrorMsg}
             />
+          )}
+
+          {/* 2d-b. GOOGLE DRIVE TRADE VAULT */}
+          {subTab === 'drive-vault' && (
+            <GoogleDriveVaultPanel onNotify={notify} onError={setErrorMsg} />
           )}
 
           {/* 2e. ANDROID TWO-WAY SYNC BRIDGE */}
@@ -1571,9 +1757,90 @@ export default function AdminWorkspacePanel() {
             </form>
           )}
 
-          {/* 6. ALL BUYER RFQs & CONVERT TO SHIPMENT */}
+          {/* 6. ALL BUYER RFQs, EXECUTIVE REVIEW & CONVERT TO SHIPMENT */}
           {subTab === 'rfqs' && (
             <div className="space-y-4">
+              {/* Review Decision Differentiation Strip */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRfqReviewBucket('all');
+                    setRfqStatusFilter('All');
+                  }}
+                  className={`p-3.5 text-left rounded-lg border transition-colors cursor-pointer ${
+                    rfqReviewBucket === 'all'
+                      ? 'bg-slate-900 text-white border-slate-900'
+                      : 'bg-white text-slate-900 border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="text-[11px] font-medium opacity-75">All Quotes / RFQs</div>
+                  <div className="font-mono text-xl font-bold mt-0.5 tabular-nums">
+                    {rfqReviewCounts.total}
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRfqReviewBucket('pending');
+                    setRfqStatusFilter('All');
+                  }}
+                  className={`p-3.5 text-left rounded-lg border transition-colors cursor-pointer ${
+                    rfqReviewBucket === 'pending'
+                      ? 'bg-amber-600 text-white border-amber-600'
+                      : 'bg-amber-50/70 text-amber-950 border-amber-200 hover:border-amber-300'
+                  }`}
+                >
+                  <div className="text-[11px] font-semibold flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 shrink-0" />
+                    <span>Pending Review</span>
+                  </div>
+                  <div className="font-mono text-xl font-bold mt-0.5 tabular-nums">
+                    {rfqReviewCounts.pending}
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRfqReviewBucket('approved');
+                    setRfqStatusFilter('All');
+                  }}
+                  className={`p-3.5 text-left rounded-lg border transition-colors cursor-pointer ${
+                    rfqReviewBucket === 'approved'
+                      ? 'bg-emerald-700 text-white border-emerald-700'
+                      : 'bg-emerald-50/70 text-emerald-950 border-emerald-200 hover:border-emerald-300'
+                  }`}
+                >
+                  <div className="text-[11px] font-semibold flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                    <span>Approved Quotes</span>
+                  </div>
+                  <div className="font-mono text-xl font-bold mt-0.5 tabular-nums">
+                    {rfqReviewCounts.approved}
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRfqReviewBucket('not_approved');
+                    setRfqStatusFilter('All');
+                  }}
+                  className={`p-3.5 text-left rounded-lg border transition-colors cursor-pointer ${
+                    rfqReviewBucket === 'not_approved'
+                      ? 'bg-red-700 text-white border-red-700'
+                      : 'bg-red-50/70 text-red-950 border-red-200 hover:border-red-300'
+                  }`}
+                >
+                  <div className="text-[11px] font-semibold flex items-center gap-1.5">
+                    <XCircle className="w-3.5 h-3.5 shrink-0" />
+                    <span>Not Approved</span>
+                  </div>
+                  <div className="font-mono text-xl font-bold mt-0.5 tabular-nums">
+                    {rfqReviewCounts.notApproved}
+                  </div>
+                </button>
+              </div>
+
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-1.5">
                   {(['All', ...RFQ_STAGES] as const).map((status) => (
@@ -1612,11 +1879,19 @@ export default function AdminWorkspacePanel() {
                 <div className="space-y-3">
                   {filteredRfqs.map((rfq) => {
                     const isEditing = editingRfqId === rfq.id;
+                    const isReviewing = reviewingRfqId === rfq.id;
                     const isConfirmingDel = confirmDeleteId === `rfq-${rfq.id}`;
+                    const reviewCategory = getRfqReviewCategory(rfq.status);
                     return (
                       <div
                         key={rfq.id}
-                        className="p-4 sm:p-5 bg-white border border-slate-200 rounded-lg space-y-3"
+                        className={`p-4 sm:p-5 bg-white border rounded-lg space-y-3 ${
+                          reviewCategory === 'not_approved'
+                            ? 'border-red-200'
+                            : reviewCategory === 'approved'
+                              ? 'border-emerald-200'
+                              : 'border-amber-200'
+                        }`}
                       >
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div className="space-y-1">
@@ -1644,24 +1919,135 @@ export default function AdminWorkspacePanel() {
                             </p>
                           </div>
 
-                          <div className="text-right shrink-0">
-                            <span className="text-xs font-semibold text-slate-900">
-                              {rfq.status}
-                            </span>
+                          <div className="text-right shrink-0 space-y-1">
+                            <div
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-md border ${
+                                reviewCategory === 'approved'
+                                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                  : reviewCategory === 'not_approved'
+                                    ? 'bg-red-50 text-red-800 border-red-200'
+                                    : 'bg-amber-50 text-amber-900 border-amber-200'
+                              }`}
+                            >
+                              {reviewCategory === 'approved' ? (
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                              ) : reviewCategory === 'not_approved' ? (
+                                <XCircle className="w-3.5 h-3.5 text-red-600 shrink-0" />
+                              ) : (
+                                <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                              )}
+                              <span>
+                                {reviewCategory === 'approved'
+                                  ? `Approved Quote · ${rfq.status}`
+                                  : reviewCategory === 'not_approved'
+                                    ? 'Not Approved (Admin Review)'
+                                    : `Pending Review · ${rfq.status}`}
+                              </span>
+                            </div>
                             {typeof rfq.estimatedValueUsd === 'number' && (
-                              <div className="font-mono text-sm font-bold text-emerald-700 mt-0.5 tabular-nums">
+                              <div className="font-mono text-sm font-bold text-emerald-700 tabular-nums">
                                 US${rfq.estimatedValueUsd.toLocaleString('en-US')}
                               </div>
                             )}
                           </div>
                         </div>
 
+                        {rfq.reviewNote && !isEditing && !isReviewing && (
+                          <div
+                            className={`px-3 py-2 rounded-md border text-xs ${
+                              reviewCategory === 'not_approved'
+                                ? 'bg-red-50/70 border-red-200 text-red-900'
+                                : 'bg-slate-50 border-slate-200 text-slate-700'
+                            }`}
+                          >
+                            <span className="font-semibold">Admin Review Note: </span>
+                            <span>{rfq.reviewNote}</span>
+                            {rfq.reviewedBy && (
+                              <span className="text-[11px] opacity-75 ml-1.5">
+                                ({rfq.reviewedBy})
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        {isReviewing && (
+                          <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-md space-y-2.5">
+                            <label className="block text-[11px] font-semibold text-slate-800">
+                              Executive Review Note (visible to buyer for Approved / Not Approved decision)
+                            </label>
+                            <input
+                              type="text"
+                              maxLength={500}
+                              value={rfqReviewNoteDraft}
+                              onChange={(e) => setRfqReviewNoteDraft(e.target.value)}
+                              placeholder="e.g., Assay & pricing verified, or Requires L/C terms / revision..."
+                              className="w-full h-9 px-3 text-xs text-slate-900 bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-amber-500"
+                            />
+                            <div className="flex flex-wrap items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setReviewingRfqId(null);
+                                  setRfqReviewNoteDraft('');
+                                }}
+                                className="px-3 py-1.5 text-xs text-slate-600 cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                disabled={savingRfqReviewId === rfq.id}
+                                onClick={() =>
+                                  void handleRfqReviewDecision(
+                                    rfq,
+                                    'Under Executive Review',
+                                    rfqReviewNoteDraft
+                                  )
+                                }
+                                className="px-3 py-1.5 text-xs font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-md cursor-pointer"
+                              >
+                                Keep Pending
+                              </button>
+                              <button
+                                type="button"
+                                disabled={savingRfqReviewId === rfq.id}
+                                onClick={() =>
+                                  void handleRfqReviewDecision(
+                                    rfq,
+                                    'Not Approved',
+                                    rfqReviewNoteDraft ||
+                                      'Quote not approved after executive review. Please amend volume, price target, or payment terms.'
+                                  )
+                                }
+                                className="px-3 py-1.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-md cursor-pointer"
+                              >
+                                Mark Not Approved
+                              </button>
+                              <button
+                                type="button"
+                                disabled={savingRfqReviewId === rfq.id}
+                                onClick={() =>
+                                  void handleRfqReviewDecision(
+                                    rfq,
+                                    'Quote Approved',
+                                    rfqReviewNoteDraft ||
+                                      'Quote approved by Ahzan Tech Ltd Executive Trade Desk.'
+                                  )
+                                }
+                                className="px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-md cursor-pointer"
+                              >
+                                Approve Quote
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
                         {isEditing ? (
                           <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-md space-y-3">
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                               <div>
                                 <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                                  Stage / Status
+                                  Stage / Review Decision
                                 </label>
                                 <select
                                   value={rfqEditDraft.status}
@@ -1732,22 +2118,42 @@ export default function AdminWorkspacePanel() {
                                 />
                               </div>
                             </div>
-                            <div>
-                              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                                Assay / Executive Notes
-                              </label>
-                              <textarea
-                                rows={2}
-                                maxLength={1000}
-                                value={rfqEditDraft.specifications}
-                                onChange={(e) =>
-                                  setRfqEditDraft((prev) => ({
-                                    ...prev,
-                                    specifications: e.target.value,
-                                  }))
-                                }
-                                className="w-full p-2.5 text-xs text-slate-900 bg-white border border-slate-300 rounded-md"
-                              />
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div>
+                                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                                  Assay / Executive Notes
+                                </label>
+                                <textarea
+                                  rows={2}
+                                  maxLength={1000}
+                                  value={rfqEditDraft.specifications}
+                                  onChange={(e) =>
+                                    setRfqEditDraft((prev) => ({
+                                      ...prev,
+                                      specifications: e.target.value,
+                                    }))
+                                  }
+                                  className="w-full p-2.5 text-xs text-slate-900 bg-white border border-slate-300 rounded-md"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                                  Admin Review Decision Note
+                                </label>
+                                <textarea
+                                  rows={2}
+                                  maxLength={500}
+                                  value={rfqEditDraft.reviewNote}
+                                  onChange={(e) =>
+                                    setRfqEditDraft((prev) => ({
+                                      ...prev,
+                                      reviewNote: e.target.value,
+                                    }))
+                                  }
+                                  placeholder="Optional reason for Approved Quote or Not Approved decision..."
+                                  className="w-full p-2.5 text-xs text-slate-900 bg-white border border-slate-300 rounded-md"
+                                />
+                              </div>
                             </div>
                             <div className="flex items-center justify-end gap-2">
                               <button
@@ -1782,6 +2188,39 @@ export default function AdminWorkspacePanel() {
 
                         <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
                           <div className="flex flex-wrap items-center gap-2">
+                            {reviewCategory !== 'approved' && (
+                              <button
+                                type="button"
+                                disabled={savingRfqReviewId === rfq.id}
+                                onClick={() =>
+                                  void handleRfqReviewDecision(
+                                    rfq,
+                                    'Quote Approved',
+                                    rfq.reviewNote ||
+                                      'Quote approved by Ahzan Tech Ltd Executive Trade Desk.'
+                                  )
+                                }
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-md cursor-pointer"
+                              >
+                                <CheckCircle2 className="w-3 h-3" />
+                                <span>Approve Quote</span>
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (isReviewing) {
+                                  setReviewingRfqId(null);
+                                } else {
+                                  setReviewingRfqId(rfq.id);
+                                  setRfqReviewNoteDraft(rfq.reviewNote || '');
+                                }
+                              }}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-slate-800 bg-slate-100 hover:bg-red-50 hover:text-red-800 border border-slate-200 rounded-md cursor-pointer"
+                            >
+                              <XCircle className="w-3 h-3 text-red-600" />
+                              <span>{isReviewing ? 'Close Review' : 'Review / Not Approve'}</span>
+                            </button>
                             <button
                               type="button"
                               onClick={() => handleStartEditRfq(rfq)}
@@ -2387,12 +2826,12 @@ export default function AdminWorkspacePanel() {
             </div>
           )}
 
-          {/* 8. TRADE DOCUMENTS ISSUANCE & VERIFICATION */}
+          {/* 8. TRADE DOCUMENTS ISSUANCE & EXECUTIVE REVIEW */}
           {subTab === 'documents' && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <h4 className="font-display text-base font-bold text-slate-900">
-                  Trade Documentation Vault &amp; Issuance
+                  Trade Documentation Vault &amp; Executive Review
                 </h4>
                 <button
                   type="button"
@@ -2404,13 +2843,107 @@ export default function AdminWorkspacePanel() {
                 </button>
               </div>
 
+              {/* Document Review Decision Summary Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setDocReviewBucket('all')}
+                  className={`p-3 text-left rounded-lg border transition-colors cursor-pointer ${
+                    docReviewBucket === 'all'
+                      ? 'bg-slate-900 text-white border-slate-900'
+                      : 'bg-white text-slate-900 border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="text-[11px] font-medium opacity-75">All Documents</div>
+                  <div className="font-mono text-lg font-bold mt-0.5 tabular-nums">
+                    {docReviewCounts.total}
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDocReviewBucket('pending')}
+                  className={`p-3 text-left rounded-lg border transition-colors cursor-pointer ${
+                    docReviewBucket === 'pending'
+                      ? 'bg-amber-600 text-white border-amber-600'
+                      : 'bg-amber-50/70 text-amber-950 border-amber-200 hover:border-amber-300'
+                  }`}
+                >
+                  <div className="text-[11px] font-semibold flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5 shrink-0" />
+                    <span>Pending Review</span>
+                  </div>
+                  <div className="font-mono text-lg font-bold mt-0.5 tabular-nums">
+                    {docReviewCounts.pending}
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDocReviewBucket('approved')}
+                  className={`p-3 text-left rounded-lg border transition-colors cursor-pointer ${
+                    docReviewBucket === 'approved'
+                      ? 'bg-emerald-700 text-white border-emerald-700'
+                      : 'bg-emerald-50/70 text-emerald-950 border-emerald-200 hover:border-emerald-300'
+                  }`}
+                >
+                  <div className="text-[11px] font-semibold flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                    <span>Approved / Verified</span>
+                  </div>
+                  <div className="font-mono text-lg font-bold mt-0.5 tabular-nums">
+                    {docReviewCounts.approved}
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDocReviewBucket('not_approved')}
+                  className={`p-3 text-left rounded-lg border transition-colors cursor-pointer ${
+                    docReviewBucket === 'not_approved'
+                      ? 'bg-red-700 text-white border-red-700'
+                      : 'bg-red-50/70 text-red-950 border-red-200 hover:border-red-300'
+                  }`}
+                >
+                  <div className="text-[11px] font-semibold flex items-center gap-1">
+                    <XCircle className="w-3.5 h-3.5 shrink-0" />
+                    <span>Not Approved</span>
+                  </div>
+                  <div className="font-mono text-lg font-bold mt-0.5 tabular-nums">
+                    {docReviewCounts.notApproved}
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDocReviewBucket('archived')}
+                  className={`p-3 text-left rounded-lg border transition-colors cursor-pointer col-span-2 sm:col-span-1 ${
+                    docReviewBucket === 'archived'
+                      ? 'bg-slate-700 text-white border-slate-700'
+                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="text-[11px] font-medium">Archived</div>
+                  <div className="font-mono text-lg font-bold mt-0.5 tabular-nums">
+                    {docReviewCounts.archived}
+                  </div>
+                </button>
+              </div>
+
+              <div className="relative w-full sm:w-72">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  value={docQuery}
+                  onChange={(e) => setDocQuery(e.target.value)}
+                  placeholder="Search doc code, title, RFQ ref..."
+                  className="w-full h-9 pl-8 pr-3 text-xs text-slate-900 bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+
               {showCreateDoc && (
                 <form
                   onSubmit={(e) => void handleCreateTradeDoc(e)}
                   className="p-5 bg-white border border-amber-300 rounded-lg space-y-4"
                 >
                   <h5 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                    Issue Verified Export Document to Buyer Dossier
+                    Issue Export Document to Buyer Dossier
                   </h5>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     <div>
@@ -2544,7 +3077,7 @@ export default function AdminWorkspacePanel() {
                     </div>
                     <div>
                       <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                        Initial Status
+                        Initial Review Status
                       </label>
                       <select
                         value={newDocDraft.status}
@@ -2600,172 +3133,320 @@ export default function AdminWorkspacePanel() {
                 </form>
               )}
 
-              <div className="bg-white border border-slate-200 rounded-lg divide-y divide-slate-200">
-                {allTradeDocuments.map((d) => {
-                  const isEditing = editingDocId === d.id;
-                  const isConfirmingDel = confirmDeleteId === `doc-${d.id}`;
-                  return (
-                    <div key={d.id} className="p-4 sm:p-5 space-y-3">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <div className="flex flex-wrap items-center gap-2 text-xs">
-                            <span className="font-mono font-bold text-slate-900">
-                              {d.docCode}
-                            </span>
-                            <span className="text-slate-300">·</span>
-                            <span className="font-semibold text-amber-700">
-                              {d.docType}
-                            </span>
-                            <span className="text-slate-300">·</span>
-                            <span className="font-mono text-slate-500">
-                              {d.issuedDate}
-                            </span>
+              {filteredTradeDocs.length === 0 ? (
+                <div className="py-10 text-center bg-white border border-slate-200 rounded-lg text-sm text-slate-600">
+                  No trade documents match the current review filter.
+                </div>
+              ) : (
+                <div className="bg-white border border-slate-200 rounded-lg divide-y divide-slate-200">
+                  {filteredTradeDocs.map((d) => {
+                    const isEditing = editingDocId === d.id;
+                    const isReviewing = reviewingDocId === d.id;
+                    const isConfirmingDel = confirmDeleteId === `doc-${d.id}`;
+                    const docCategory = getDocReviewCategory(d.status);
+                    return (
+                      <div key={d.id} className="p-4 sm:p-5 space-y-3">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2 text-xs">
+                              <span className="font-mono font-bold text-slate-900">
+                                {d.docCode}
+                              </span>
+                              <span className="text-slate-300">·</span>
+                              <span className="font-semibold text-amber-700">
+                                {d.docType}
+                              </span>
+                              <span className="text-slate-300">·</span>
+                              <span className="font-mono text-slate-500">
+                                {d.issuedDate}
+                              </span>
+                            </div>
+                            <h5 className="font-display text-sm sm:text-base font-bold text-slate-900 mt-0.5">
+                              {d.title}
+                            </h5>
+                            <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-slate-500">
+                              <span>
+                                {d.issuer} · RFQ {d.rfqRefId}
+                              </span>
+                              <span
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded font-semibold border ${
+                                  docCategory === 'approved'
+                                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                    : docCategory === 'not_approved'
+                                      ? 'bg-red-50 text-red-800 border-red-200'
+                                      : docCategory === 'pending'
+                                        ? 'bg-amber-50 text-amber-900 border-amber-200'
+                                        : 'bg-slate-100 text-slate-600 border-slate-200'
+                                }`}
+                              >
+                                {docCategory === 'approved' ? (
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                ) : docCategory === 'not_approved' ? (
+                                  <XCircle className="w-3 h-3 text-red-600" />
+                                ) : docCategory === 'pending' ? (
+                                  <Clock className="w-3 h-3 text-amber-600" />
+                                ) : null}
+                                <span>{d.status}</span>
+                              </span>
+                            </div>
                           </div>
-                          <h5 className="font-display text-sm sm:text-base font-bold text-slate-900 mt-0.5">
-                            {d.title}
-                          </h5>
-                          <p className="text-xs text-slate-500">
-                            {d.issuer} · RFQ {d.rfqRefId} ·{' '}
-                            <span
-                              className={`font-semibold ${
-                                d.status === 'Verified'
-                                  ? 'text-emerald-700'
-                                  : d.status === 'Archived'
-                                    ? 'text-slate-500'
-                                    : 'text-amber-700'
-                              }`}
-                            >
-                              {d.status}
-                            </span>
-                          </p>
-                        </div>
 
-                        <div className="flex flex-wrap items-center gap-2 shrink-0">
-                          {d.status === 'Pending Countersignature' && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                void adminVerifyTradeDocument(d.id).then(() =>
-                                  notify(`Document ${d.docCode} marked Verified.`)
-                                )
-                              }
-                              className="px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-md cursor-pointer"
-                            >
-                              Verify Now
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => handleStartEditDoc(d)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md cursor-pointer"
-                          >
-                            <Edit3 className="w-3 h-3" />
-                            <span>Edit</span>
-                          </button>
-
-                          {isConfirmingDel ? (
-                            <div className="flex items-center gap-1.5">
+                          <div className="flex flex-wrap items-center gap-2 shrink-0">
+                            {docCategory !== 'approved' && docCategory !== 'archived' && (
+                              <button
+                                type="button"
+                                disabled={savingDocReviewId === d.id}
+                                onClick={() =>
+                                  void handleDocReviewDecision(
+                                    d,
+                                    'Approved',
+                                    d.reviewNote ||
+                                      'Document approved after executive compliance verification.'
+                                  )
+                                }
+                                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-md cursor-pointer"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>Approve Doc</span>
+                              </button>
+                            )}
+                            {docCategory !== 'archived' && (
                               <button
                                 type="button"
                                 onClick={() => {
-                                  setConfirmDeleteId(null);
-                                  void adminDeleteTradeDocument(d.id).then(() =>
-                                    notify('Trade document removed.')
-                                  );
+                                  if (isReviewing) {
+                                    setReviewingDocId(null);
+                                  } else {
+                                    setReviewingDocId(d.id);
+                                    setDocReviewNoteDraft(d.reviewNote || '');
+                                  }
                                 }}
-                                className="px-2.5 py-1 text-xs font-semibold text-white bg-red-600 rounded cursor-pointer"
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-slate-800 bg-slate-100 hover:bg-red-50 hover:text-red-800 border border-slate-200 rounded-md cursor-pointer"
                               >
-                                Confirm Delete
+                                <XCircle className="w-3 h-3 text-red-600" />
+                                <span>{isReviewing ? 'Close Review' : 'Review / Not Approve'}</span>
                               </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleStartEditDoc(d)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md cursor-pointer"
+                            >
+                              <Edit3 className="w-3 h-3" />
+                              <span>Edit</span>
+                            </button>
+
+                            {isConfirmingDel ? (
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setConfirmDeleteId(null);
+                                    void adminDeleteTradeDocument(d.id).then(() =>
+                                      notify('Trade document removed.')
+                                    );
+                                  }}
+                                  className="px-2.5 py-1 text-xs font-semibold text-white bg-red-600 rounded cursor-pointer"
+                                >
+                                  Confirm Delete
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmDeleteId(null)}
+                                  className="px-2 py-1 text-xs text-slate-600 cursor-pointer"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            ) : (
                               <button
                                 type="button"
-                                onClick={() => setConfirmDeleteId(null)}
-                                className="px-2 py-1 text-xs text-slate-600 cursor-pointer"
+                                onClick={() => setConfirmDeleteId(`doc-${d.id}`)}
+                                className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 rounded-md cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {d.reviewNote && !isEditing && !isReviewing && (
+                          <div
+                            className={`px-3 py-2 rounded-md border text-xs ${
+                              docCategory === 'not_approved'
+                                ? 'bg-red-50/70 border-red-200 text-red-900'
+                                : 'bg-slate-50 border-slate-200 text-slate-700'
+                            }`}
+                          >
+                            <span className="font-semibold">Admin Review Note: </span>
+                            <span>{d.reviewNote}</span>
+                            {d.reviewedBy && (
+                              <span className="text-[11px] opacity-75 ml-1.5">
+                                ({d.reviewedBy})
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        {isReviewing && (
+                          <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-md space-y-2.5">
+                            <label className="block text-[11px] font-semibold text-slate-800">
+                              Executive Document Review Note (reason for Approved / Pending / Not Approved)
+                            </label>
+                            <input
+                              type="text"
+                              maxLength={500}
+                              value={docReviewNoteDraft}
+                              onChange={(e) => setDocReviewNoteDraft(e.target.value)}
+                              placeholder="e.g., SGS seal verified, or Missing countersignature / expired certificate..."
+                              className="w-full h-9 px-3 text-xs text-slate-900 bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-amber-500"
+                            />
+                            <div className="flex flex-wrap items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setReviewingDocId(null);
+                                  setDocReviewNoteDraft('');
+                                }}
+                                className="px-3 py-1.5 text-xs text-slate-600 cursor-pointer"
                               >
                                 Cancel
                               </button>
+                              <button
+                                type="button"
+                                disabled={savingDocReviewId === d.id}
+                                onClick={() =>
+                                  void handleDocReviewDecision(
+                                    d,
+                                    'Pending Review',
+                                    docReviewNoteDraft
+                                  )
+                                }
+                                className="px-3 py-1.5 text-xs font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-md cursor-pointer"
+                              >
+                                Keep Pending
+                              </button>
+                              <button
+                                type="button"
+                                disabled={savingDocReviewId === d.id}
+                                onClick={() =>
+                                  void handleDocReviewDecision(
+                                    d,
+                                    'Not Approved',
+                                    docReviewNoteDraft ||
+                                      'Document not approved after admin compliance review. Please upload or request a corrected copy.'
+                                  )
+                                }
+                                className="px-3 py-1.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-md cursor-pointer"
+                              >
+                                Mark Not Approved
+                              </button>
+                              <button
+                                type="button"
+                                disabled={savingDocReviewId === d.id}
+                                onClick={() =>
+                                  void handleDocReviewDecision(
+                                    d,
+                                    'Approved',
+                                    docReviewNoteDraft ||
+                                      'Document approved after executive compliance verification.'
+                                  )
+                                }
+                                className="px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-md cursor-pointer"
+                              >
+                                Approve Document
+                              </button>
                             </div>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => setConfirmDeleteId(`doc-${d.id}`)}
-                              className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 rounded-md cursor-pointer"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
+                          </div>
+                        )}
 
-                      {isEditing ? (
-                        <div className="p-3 bg-slate-50 border border-slate-200 rounded-md space-y-2.5">
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        {isEditing ? (
+                          <div className="p-3 bg-slate-50 border border-slate-200 rounded-md space-y-2.5">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                              <div>
+                                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                                  Document Status
+                                </label>
+                                <select
+                                  value={docEditDraft.status}
+                                  onChange={(e) =>
+                                    setDocEditDraft((p) => ({
+                                      ...p,
+                                      status: e.target.value as TradeDocStatus,
+                                    }))
+                                  }
+                                  className="w-full h-9 px-2.5 text-xs text-slate-900 bg-white border border-slate-300 rounded-md"
+                                >
+                                  {TRADE_DOC_STATUSES.map((st) => (
+                                    <option key={st} value={st}>
+                                      {st}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="sm:col-span-2">
+                                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                                  Summary &amp; Inspection Notes
+                                </label>
+                                <input
+                                  type="text"
+                                  maxLength={1500}
+                                  value={docEditDraft.summaryText}
+                                  onChange={(e) =>
+                                    setDocEditDraft((p) => ({
+                                      ...p,
+                                      summaryText: e.target.value,
+                                    }))
+                                  }
+                                  className="w-full h-9 px-2.5 text-xs text-slate-900 bg-white border border-slate-300 rounded-md"
+                                />
+                              </div>
+                            </div>
                             <div>
                               <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                                Document Status
-                              </label>
-                              <select
-                                value={docEditDraft.status}
-                                onChange={(e) =>
-                                  setDocEditDraft((p) => ({
-                                    ...p,
-                                    status: e.target.value as TradeDocStatus,
-                                  }))
-                                }
-                                className="w-full h-9 px-2.5 text-xs text-slate-900 bg-white border border-slate-300 rounded-md"
-                              >
-                                {TRADE_DOC_STATUSES.map((st) => (
-                                  <option key={st} value={st}>
-                                    {st}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                            <div className="sm:col-span-2">
-                              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                                Summary &amp; Inspection Notes
+                                Admin Review Note (Approved / Not Approved reason)
                               </label>
                               <input
                                 type="text"
-                                maxLength={1500}
-                                value={docEditDraft.summaryText}
+                                maxLength={500}
+                                value={docEditDraft.reviewNote}
                                 onChange={(e) =>
                                   setDocEditDraft((p) => ({
                                     ...p,
-                                    summaryText: e.target.value,
+                                    reviewNote: e.target.value,
                                   }))
                                 }
                                 className="w-full h-9 px-2.5 text-xs text-slate-900 bg-white border border-slate-300 rounded-md"
                               />
                             </div>
+                            <div className="flex justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setEditingDocId(null)}
+                                className="px-3 py-1 text-xs text-slate-600 cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                disabled={savingDocId === d.id}
+                                onClick={() => void handleSaveDocEdit(d.id)}
+                                className="px-3 py-1.5 text-xs font-semibold text-white bg-slate-900 rounded-md cursor-pointer"
+                              >
+                                Save Document
+                              </button>
+                            </div>
                           </div>
-                          <div className="flex justify-end gap-2">
-                            <button
-                              type="button"
-                              onClick={() => setEditingDocId(null)}
-                              className="px-3 py-1 text-xs text-slate-600 cursor-pointer"
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              type="button"
-                              disabled={savingDocId === d.id}
-                              onClick={() => void handleSaveDocEdit(d.id)}
-                              className="px-3 py-1.5 text-xs font-semibold text-white bg-slate-900 rounded-md cursor-pointer"
-                            >
-                              Save Document
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="text-xs text-slate-600 bg-slate-50 px-3 py-2 rounded-md border border-slate-100">
-                          {d.summaryText}
-                        </p>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+                        ) : (
+                          <p className="text-xs text-slate-600 bg-slate-50 px-3 py-2 rounded-md border border-slate-100">
+                            {d.summaryText}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
