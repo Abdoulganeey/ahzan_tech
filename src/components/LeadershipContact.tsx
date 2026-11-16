@@ -103,15 +103,11 @@ export default function LeadershipContact({
               </p>
             </div>
 
-            {/* Direct Corporate Emails */}
+            {/* Direct Corporate Email */}
             <div className="space-y-3">
               {[
                 {
-                  label: t.leadership.execEmailLabel,
-                  email: 'ceo@ahzan.tech',
-                },
-                {
-                  label: t.leadership.tradeEmailLabel,
+                  label: `${t.leadership.execEmailLabel} · ${t.leadership.tradeEmailLabel}`,
                   email: 'abdoul@ahzantechltd.com',
                 },
               ].map((channel) => (
@@ -162,9 +158,9 @@ export default function LeadershipContact({
                   {t.leadership.hqTitle}
                 </div>
                 <p className="text-slate-300 leading-relaxed">
-                  {t.leadership.hqAddress}
+                  Kano State Headquarters · Abuja &amp; Lagos Export Corridors, Nigeria
                   <br />
-                  {t.leadership.hqPorts}
+                  Tel / WhatsApp: +234 903 352 4525 · Ports: Apapa · Tin Can Island · Onne
                 </p>
               </div>
             </div>
@@ -172,7 +168,7 @@ export default function LeadershipContact({
             {/* Action Buttons: WhatsApp Business + Deal Room */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
               <a
-                href="https://wa.me/2348000000000?text=Hello%20Ahzan%20Tech%20Ltd%20Trade%20Desk%2C%20I%20would%20like%20to%20inquire%20about%20a%20B2B%20commodity%20or%20wholesale%20order."
+                href="https://wa.me/2349033524525?text=Hello%20Ahzan%20Tech%20Ltd%20Trade%20Desk%2C%20I%20would%20like%20to%20inquire%20about%20a%20B2B%20commodity%20or%20wholesale%20order."
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center justify-center gap-2 py-3 px-4 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors whitespace-nowrap"

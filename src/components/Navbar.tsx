@@ -1,15 +1,24 @@
 import { useState } from 'react';
-import { Globe, Menu, X } from 'lucide-react';
+import { Globe, LayoutDashboard, Menu, X } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
+import { useBuyerAuth } from '../context/BuyerAuthContext';
 
 interface NavbarProps {
   onOpenDealRoom: () => void;
+  onToggleBuyerDashboard: () => void;
+  buyerDashboardOpen?: boolean;
   manifestCount?: number;
 }
 
-export default function Navbar({ onOpenDealRoom, manifestCount = 0 }: NavbarProps) {
+export default function Navbar({
+  onOpenDealRoom,
+  onToggleBuyerDashboard,
+  buyerDashboardOpen = false,
+  manifestCount = 0,
+}: NavbarProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { lang, setLang, t } = useLanguage();
+  const { user } = useBuyerAuth();
 
   const navLinks = [
     { label: t.nav.catalog, href: '#catalog' },
@@ -100,6 +109,28 @@ export default function Navbar({ onOpenDealRoom, manifestCount = 0 }: NavbarProp
 
           <button
             type="button"
+            onClick={onToggleBuyerDashboard}
+            aria-pressed={buyerDashboardOpen}
+            className={`hidden sm:inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-md border transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+              buyerDashboardOpen
+                ? 'bg-slate-800 text-white border-amber-500'
+                : 'bg-slate-900 text-slate-200 border-slate-700 hover:border-slate-500 hover:text-white'
+            }`}
+          >
+            <LayoutDashboard className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span>
+              {user
+                ? lang === 'fr'
+                  ? 'Tableau Acheteur'
+                  : 'Buyer Dashboard'
+                : lang === 'fr'
+                  ? 'Espace Acheteur'
+                  : 'Buyer Portal'}
+            </span>
+          </button>
+
+          <button
+            type="button"
             onClick={onOpenDealRoom}
             className="hidden sm:inline-flex items-center justify-center px-4 py-2 text-sm font-semibold text-slate-950 bg-amber-500 hover:bg-amber-400 active:bg-amber-600 rounded-md transition-colors duration-150 whitespace-nowrap shrink-0 cursor-pointer tabular-nums focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
           >
@@ -135,7 +166,27 @@ export default function Navbar({ onOpenDealRoom, manifestCount = 0 }: NavbarProp
               {item.label}
             </a>
           ))}
-          <div className="pt-3 border-t border-slate-800">
+          <div className="pt-3 border-t border-slate-800 space-y-2">
+            <button
+              type="button"
+              onClick={() => {
+                setMobileOpen(false);
+                onToggleBuyerDashboard();
+              }}
+              className="w-full py-2.5 px-4 inline-flex items-center justify-center gap-2 text-sm font-semibold text-white bg-slate-900 border border-slate-700 hover:bg-slate-800 rounded-md transition-colors cursor-pointer"
+            >
+              <LayoutDashboard className="w-4 h-4 text-amber-400" />
+              <span>
+                {user
+                  ? lang === 'fr'
+                    ? 'Tableau Acheteur'
+                    : 'Buyer Dashboard'
+                  : lang === 'fr'
+                    ? 'Espace Acheteur'
+                    : 'Buyer Portal'}
+              </span>
+            </button>
+
             <button
               type="button"
               onClick={() => {

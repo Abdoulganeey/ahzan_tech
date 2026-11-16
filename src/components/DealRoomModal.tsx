@@ -16,6 +16,7 @@ import {
 import type { CalculatorPrefill } from './IncotermsCalculator';
 import { useLanguage } from '../i18n/LanguageContext';
 import { PRODUCT_FR } from '../i18n/translations';
+import { useBuyerAuth } from '../context/BuyerAuthContext';
 
 export interface ManifestLineItem {
   id: string;
@@ -44,6 +45,7 @@ interface DealRoomModalProps {
   manifestItems?: ManifestLineItem[];
   onRemoveManifestItem?: (lineId: string) => void;
   onClearManifest?: () => void;
+  onOpenBuyerDashboard?: () => void;
 }
 
 interface FormState {
@@ -91,8 +93,10 @@ export default function DealRoomModal({
   manifestItems = [],
   onRemoveManifestItem,
   onClearManifest,
+  onOpenBuyerDashboard,
 }: DealRoomModalProps) {
   const { lang, t } = useLanguage();
+  const { user, profile, saveNewRfqToFirestore } = useBuyerAuth();
   const [form, setForm] = useState<FormState>({
     companyName: '',
     contactName: '',
@@ -107,6 +111,8 @@ export default function DealRoomModal({
 
   const [errors, setErrors] = useState<FormErrors>({});
   const [submittedRef, setSubmittedRef] = useState<string | null>(null);
+  const [submittingRfq, setSubmittingRfq] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [copiedSummary, setCopiedSummary] = useState(false);
   const [activeTab, setActiveTab] = useState<'form' | 'history'>('form');
   const [history, setHistory] = useState<SavedRfqRecord[]>([]);
@@ -127,6 +133,17 @@ export default function DealRoomModal({
   useEffect(() => {
     if (!isOpen) return;
     setActiveTab('form');
+
+    if (user) {
+      setForm((prev) => ({
+        ...prev,
+        companyName: prev.companyName || profile?.companyName || '',
+        contactName:
+          prev.contactName || profile?.contactName || user.displayName || '',
+        corporateEmail: prev.corporateEmail || user.email || '',
+        destinationPort: prev.destinationPort || profile?.defaultPort || '',
+      }));
+    }
 
     if (calculatorPrefill) {
       setForm((prev) => ({
@@ -150,7 +167,7 @@ export default function DealRoomModal({
       setSubmittedRef(null);
       setErrors({});
     }
-  }, [isOpen, initialProductId, calculatorPrefill]);
+  }, [isOpen, initialProductId, calculatorPrefill, user, profile]);
 
   // Close on Escape key
   useEffect(() => {
@@ -239,20 +256,21 @@ export default function DealRoomModal({
       ``,
       form.specifications ? `CUSTOM SPECIFICATIONS:\n${form.specifications}` : '',
       ``,
-      `Executive Trade Desk: ceo@ahzan.tech | abdoul@ahzantechltd.com`,
+      `Executive Trade Desk: abdoul@ahzantechltd.com`,
       `Principal Signatory:  Abdulganiyu Hamza, Founder & CEO`,
     ].filter((l) => l !== undefined);
 
     return lines.join('\n');
   };
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
 
+    setSubmitError(null);
+    setSubmittingRfq(true);
     const timestampPart = String(Date.now()).slice(-6);
     const refId = `AHT-RFQ-${timestampPart}`;
-    setSubmittedRef(refId);
 
     const commoditySummary = hasManifest
       ? `${manifestItems.length} manifest lines (${manifestItems.map((m) => m.productName).join(', ')})`
@@ -272,12 +290,49 @@ export default function DealRoomModal({
       paymentTerms: form.paymentTerms,
     };
 
-    const updatedHistory = [newRecord, ...history].slice(0, 8);
-    setHistory(updatedHistory);
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedHistory));
-    } catch {
-      // Ignore storage quota error
+      if (user) {
+        const totalEstimatedUsd = hasManifest
+          ? manifestItems.reduce((sum, item) => sum + (item.estimatedTotalUsd || 0), 0)
+          : calculatorPrefill?.estimatedTotalUsd;
+        await saveNewRfqToFirestore({
+          refId,
+          companyName: form.companyName.trim(),
+          contactName: form.contactName.trim(),
+          corporateEmail: form.corporateEmail.trim(),
+          destinationPort: form.destinationPort.trim(),
+          commoditySummary: hasManifest
+            ? `${manifestItems.length} lines: ${manifestItems.map((m) => m.productName).join(', ')}`.slice(0, 300)
+            : selectedProduct.name,
+          targetVolume: hasManifest
+            ? manifestItems.map((m) => m.volumeSummary).join('; ').slice(0, 120)
+            : form.targetVolume.trim(),
+          incoterm: form.incoterm,
+          paymentTerms: form.paymentTerms,
+          specifications: form.specifications.trim() || undefined,
+          estimatedValueUsd:
+            typeof totalEstimatedUsd === 'number' && totalEstimatedUsd > 0
+              ? totalEstimatedUsd
+              : undefined,
+        });
+      }
+
+      const updatedHistory = [newRecord, ...history].slice(0, 8);
+      setHistory(updatedHistory);
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedHistory));
+      } catch {
+        // Ignore storage quota error
+      }
+      setSubmittedRef(refId);
+    } catch (err) {
+      setSubmitError(
+        err instanceof Error
+          ? err.message
+          : 'Unable to save RFQ dossier to your buyer account.'
+      );
+    } finally {
+      setSubmittingRfq(false);
     }
   };
 
@@ -513,7 +568,21 @@ export default function DealRoomModal({
                   </button>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  {user && onOpenBuyerDashboard && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClose();
+                        onOpenBuyerDashboard();
+                      }}
+                      className="px-4 py-2.5 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors cursor-pointer"
+                    >
+                      {lang === 'fr'
+                        ? 'Voir dans Tableau Acheteur'
+                        : 'View in Buyer Dashboard'}
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={handleReset}
@@ -533,7 +602,13 @@ export default function DealRoomModal({
             </div>
           ) : (
             /* RFQ / LOI Form */
-            <form onSubmit={handleSubmit} noValidate className="space-y-5">
+            <form onSubmit={(e) => void handleSubmit(e)} noValidate className="space-y-5">
+              {submitError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{submitError}</span>
+                </div>
+              )}
               {/* Active Multi-Line Manifest Summary (when populated) */}
               {hasManifest && (
                 <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
@@ -836,9 +911,14 @@ export default function DealRoomModal({
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2.5 text-sm font-semibold text-slate-950 bg-amber-500 hover:bg-amber-400 rounded-lg transition-colors cursor-pointer"
+                    disabled={submittingRfq}
+                    className="px-5 py-2.5 text-sm font-semibold text-slate-950 bg-amber-500 hover:bg-amber-400 disabled:opacity-60 rounded-lg transition-colors cursor-pointer"
                   >
-                    {t.dealRoom.submitBtn}
+                    {submittingRfq
+                      ? lang === 'fr'
+                        ? 'Enregistrement...'
+                        : 'Submitting...'
+                      : t.dealRoom.submitBtn}
                   </button>
                 </div>
               </div>

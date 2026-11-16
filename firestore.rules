@@ -1,0 +1,395 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Pillar 0: Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Global hardened primitives
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidEmailFormat(email) {
+      return email is string &&
+        email.size() >= 5 &&
+        email.size() <= 160 &&
+        email.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // Verified admin check without DB lookups (safe for list rules)
+    function isEmailAdmin() {
+      return isVerifiedUser() && request.auth.token.email == 'abdoulganeey@gmail.com';
+    }
+
+    function isAdmin() {
+      return isEmailAdmin() || (
+        isVerifiedUser() && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidIncoterm(val) {
+      return val in ['EXW', 'FOB', 'CFR', 'CIF', 'DAP'];
+    }
+
+    function isValidRfqStatus(val) {
+      return val in [
+        'Submitted',
+        'Under Executive Review',
+        'SCO / Proforma Issued',
+        'L/C Confirmed',
+        'Export Cleared'
+      ];
+    }
+
+    function isValidShipmentStatus(val) {
+      return val in [
+        'Mine / Farm Gate',
+        'SGS Assay Verification',
+        'NESS & Customs Cleared',
+        'In Ocean Transit',
+        'Discharged at Port'
+      ];
+    }
+
+    function isValidDocType(val) {
+      return val in [
+        'Proforma Invoice',
+        'SGS Assay Certificate',
+        'Bill of Lading',
+        'Certificate of Origin',
+        'Phytosanitary Certificate',
+        'Form NXP / NESS Clearance'
+      ];
+    }
+
+    function isValidDocStatus(val) {
+      return val in ['Verified', 'Pending Countersignature', 'Archived'];
+    }
+
+    // Entity blueprint validators
+    function isValidBuyerProfile(data) {
+      return data.keys().hasAll([
+          'buyerUid',
+          'companyName',
+          'contactName',
+          'email',
+          'defaultPort',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'buyerUid',
+          'companyName',
+          'contactName',
+          'email',
+          'defaultPort',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        isValidId(data.buyerUid) &&
+        data.companyName is string && data.companyName.size() >= 2 && data.companyName.size() <= 160 &&
+        data.contactName is string && data.contactName.size() >= 2 && data.contactName.size() <= 120 &&
+        isValidEmailFormat(data.email) &&
+        data.defaultPort is string && data.defaultPort.size() >= 2 && data.defaultPort.size() <= 120 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidBuyerRfq(data) {
+      return data.keys().hasAll([
+          'buyerUid',
+          'refId',
+          'companyName',
+          'contactName',
+          'corporateEmail',
+          'destinationPort',
+          'commoditySummary',
+          'targetVolume',
+          'incoterm',
+          'paymentTerms',
+          'status',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'buyerUid',
+          'refId',
+          'companyName',
+          'contactName',
+          'corporateEmail',
+          'destinationPort',
+          'commoditySummary',
+          'targetVolume',
+          'incoterm',
+          'paymentTerms',
+          'specifications',
+          'status',
+          'estimatedValueUsd',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        isValidId(data.buyerUid) &&
+        isValidId(data.refId) &&
+        data.refId.size() >= 4 && data.refId.size() <= 40 &&
+        data.companyName is string && data.companyName.size() >= 2 && data.companyName.size() <= 160 &&
+        data.contactName is string && data.contactName.size() >= 2 && data.contactName.size() <= 120 &&
+        isValidEmailFormat(data.corporateEmail) &&
+        data.destinationPort is string && data.destinationPort.size() >= 2 && data.destinationPort.size() <= 120 &&
+        data.commoditySummary is string && data.commoditySummary.size() >= 2 && data.commoditySummary.size() <= 300 &&
+        data.targetVolume is string && data.targetVolume.size() >= 1 && data.targetVolume.size() <= 120 &&
+        isValidIncoterm(data.incoterm) &&
+        data.paymentTerms is string && data.paymentTerms.size() >= 2 && data.paymentTerms.size() <= 120 &&
+        (!data.keys().hasAny(['specifications']) || (data.specifications is string && data.specifications.size() <= 1000)) &&
+        isValidRfqStatus(data.status) &&
+        (!data.keys().hasAny(['estimatedValueUsd']) || (data.estimatedValueUsd is number && data.estimatedValueUsd >= 0)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidBuyerShipment(data) {
+      return data.keys().hasAll([
+          'buyerUid',
+          'trackingCode',
+          'rfqRefId',
+          'commodity',
+          'originPort',
+          'destinationPort',
+          'vesselName',
+          'billOfLadingNo',
+          'containerAllocation',
+          'stageIndex',
+          'status',
+          'etaDate',
+          'lastUpdateNote',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'buyerUid',
+          'trackingCode',
+          'rfqRefId',
+          'commodity',
+          'originPort',
+          'destinationPort',
+          'vesselName',
+          'billOfLadingNo',
+          'containerAllocation',
+          'stageIndex',
+          'status',
+          'etaDate',
+          'lastUpdateNote',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        isValidId(data.buyerUid) &&
+        isValidId(data.trackingCode) &&
+        data.trackingCode.size() >= 4 && data.trackingCode.size() <= 48 &&
+        isValidId(data.rfqRefId) &&
+        data.rfqRefId.size() >= 4 && data.rfqRefId.size() <= 40 &&
+        data.commodity is string && data.commodity.size() >= 2 && data.commodity.size() <= 180 &&
+        data.originPort is string && data.originPort.size() >= 2 && data.originPort.size() <= 120 &&
+        data.destinationPort is string && data.destinationPort.size() >= 2 && data.destinationPort.size() <= 120 &&
+        data.vesselName is string && data.vesselName.size() >= 2 && data.vesselName.size() <= 120 &&
+        data.billOfLadingNo is string && data.billOfLadingNo.size() >= 2 && data.billOfLadingNo.size() <= 80 &&
+        data.containerAllocation is string && data.containerAllocation.size() >= 2 && data.containerAllocation.size() <= 80 &&
+        data.stageIndex is number && data.stageIndex >= 1 && data.stageIndex <= 5 &&
+        isValidShipmentStatus(data.status) &&
+        data.etaDate is string && data.etaDate.size() >= 4 && data.etaDate.size() <= 40 &&
+        data.lastUpdateNote is string && data.lastUpdateNote.size() >= 4 && data.lastUpdateNote.size() <= 320 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidTradeDocument(data) {
+      return data.keys().hasAll([
+          'buyerUid',
+          'docCode',
+          'title',
+          'docType',
+          'rfqRefId',
+          'commodity',
+          'issuer',
+          'issuedDate',
+          'status',
+          'summaryText',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'buyerUid',
+          'docCode',
+          'title',
+          'docType',
+          'rfqRefId',
+          'commodity',
+          'issuer',
+          'issuedDate',
+          'status',
+          'summaryText',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        isValidId(data.buyerUid) &&
+        isValidId(data.docCode) &&
+        data.docCode.size() >= 4 && data.docCode.size() <= 48 &&
+        data.title is string && data.title.size() >= 3 && data.title.size() <= 180 &&
+        isValidDocType(data.docType) &&
+        isValidId(data.rfqRefId) &&
+        data.rfqRefId.size() >= 4 && data.rfqRefId.size() <= 40 &&
+        data.commodity is string && data.commodity.size() >= 2 && data.commodity.size() <= 160 &&
+        data.issuer is string && data.issuer.size() >= 2 && data.issuer.size() <= 120 &&
+        data.issuedDate is string && data.issuedDate.size() >= 4 && data.issuedDate.size() <= 40 &&
+        isValidDocStatus(data.status) &&
+        data.summaryText is string && data.summaryText.size() >= 4 && data.summaryText.size() <= 1500 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // 1. Private Buyer Profiles (/buyers/{buyerId})
+    match /buyers/{buyerId} {
+      allow get: if isValidId(buyerId) && (isOwner(buyerId) || isAdmin());
+      allow list: if false;
+      allow create: if isVerifiedUser() &&
+        isValidId(buyerId) &&
+        isValidBuyerProfile(incoming()) &&
+        buyerId == request.auth.uid &&
+        incoming().buyerUid == request.auth.uid &&
+        incoming().email == request.auth.token.email &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() &&
+        isValidId(buyerId) &&
+        isValidBuyerProfile(incoming()) &&
+        (isOwner(buyerId) || isAdmin()) &&
+        incoming().buyerUid == existing().buyerUid &&
+        incoming().email == existing().email &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['companyName', 'contactName', 'defaultPort', 'updatedAt']);
+      allow delete: if false;
+    }
+
+    // 2. Buyer RFQs (/rfqs/{rfqId})
+    match /rfqs/{rfqId} {
+      allow get: if isValidId(rfqId) && (isOwner(existing().buyerUid) || isAdmin());
+      allow list: if isSignedIn() && (existing().buyerUid == request.auth.uid || isEmailAdmin());
+      allow create: if isVerifiedUser() &&
+        isValidId(rfqId) &&
+        isValidBuyerRfq(incoming()) &&
+        incoming().buyerUid == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() &&
+        isValidId(rfqId) &&
+        isValidBuyerRfq(incoming()) &&
+        incoming().buyerUid == existing().buyerUid &&
+        incoming().refId == existing().refId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          (
+            isAdmin() &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'destinationPort', 'targetVolume', 'specifications', 'updatedAt'])
+          ) ||
+          (
+            isOwner(existing().buyerUid) &&
+            existing().status != 'Export Cleared' &&
+            incoming().status == existing().status &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['destinationPort', 'targetVolume', 'specifications', 'updatedAt'])
+          )
+        );
+      allow delete: if isAdmin() && isValidId(rfqId);
+    }
+
+    // 3. Buyer Shipments (/shipments/{shipmentId})
+    match /shipments/{shipmentId} {
+      allow get: if isValidId(shipmentId) && (isOwner(existing().buyerUid) || isAdmin());
+      allow list: if isSignedIn() && (existing().buyerUid == request.auth.uid || isEmailAdmin());
+      allow create: if isVerifiedUser() &&
+        isValidId(shipmentId) &&
+        isValidBuyerShipment(incoming()) &&
+        (incoming().buyerUid == request.auth.uid || isAdmin()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() &&
+        isValidId(shipmentId) &&
+        isValidBuyerShipment(incoming()) &&
+        incoming().buyerUid == existing().buyerUid &&
+        incoming().trackingCode == existing().trackingCode &&
+        incoming().rfqRefId == existing().rfqRefId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          (
+            isAdmin() &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['stageIndex', 'status', 'etaDate', 'vesselName', 'billOfLadingNo', 'lastUpdateNote', 'updatedAt'])
+          ) ||
+          (
+            isOwner(existing().buyerUid) &&
+            existing().status != 'Discharged at Port' &&
+            incoming().status == existing().status &&
+            incoming().stageIndex == existing().stageIndex &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['lastUpdateNote', 'updatedAt'])
+          )
+        );
+      allow delete: if isAdmin() && isValidId(shipmentId);
+    }
+
+    // 4. Trade Documents (/tradeDocuments/{docId})
+    match /tradeDocuments/{docId} {
+      allow get: if isValidId(docId) && (isOwner(existing().buyerUid) || isAdmin());
+      allow list: if isSignedIn() && (existing().buyerUid == request.auth.uid || isEmailAdmin());
+      allow create: if isVerifiedUser() &&
+        isValidId(docId) &&
+        isValidTradeDocument(incoming()) &&
+        (incoming().buyerUid == request.auth.uid || isAdmin()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() &&
+        isValidId(docId) &&
+        isValidTradeDocument(incoming()) &&
+        incoming().buyerUid == existing().buyerUid &&
+        incoming().docCode == existing().docCode &&
+        incoming().rfqRefId == existing().rfqRefId &&
+        incoming().issuer == existing().issuer &&
+        incoming().issuedDate == existing().issuedDate &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          (
+            isAdmin() &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'summaryText', 'updatedAt'])
+          ) ||
+          (
+            isOwner(existing().buyerUid) &&
+            existing().status != 'Archived' &&
+            incoming().status == 'Archived' &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+          )
+        );
+      allow delete: if isAdmin() && isValidId(docId);
+    }
+  }
+}

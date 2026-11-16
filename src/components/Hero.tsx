@@ -17,9 +17,10 @@ import { COMPLIANCE_BADGE_FR } from '../i18n/translations';
 
 interface HeroProps {
   onOpenDealRoom: () => void;
+  onOpenBuyerDashboard?: () => void;
 }
 
-export default function Hero({ onOpenDealRoom }: HeroProps) {
+export default function Hero({ onOpenDealRoom, onOpenBuyerDashboard }: HeroProps) {
   const { lang, t } = useLanguage();
   const [snapshot, setSnapshot] = useState<ComplianceRegistrySnapshot | null>(
     null
@@ -104,6 +105,23 @@ export default function Hero({ onOpenDealRoom }: HeroProps) {
                   {t.hero.ctaSecondary}
                 </a>
               </div>
+
+              {onOpenBuyerDashboard && (
+                <div className="mt-5">
+                  <button
+                    type="button"
+                    onClick={onOpenBuyerDashboard}
+                    className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-medium text-slate-300 hover:text-amber-400 transition-colors cursor-pointer"
+                  >
+                    <span>
+                      {lang === 'fr'
+                        ? 'Acheteur enregistré ? Suivre vos RFQ, expéditions & documents'
+                        : 'Existing buyer? Track active RFQs, FCL shipments & trade documents'}
+                    </span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Right Column: Dynamic Verified Compliance Badge Section */}

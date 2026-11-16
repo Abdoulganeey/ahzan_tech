@@ -85,10 +85,10 @@ const CORRIDORS_FR: Record<string, { region: string; focus: string }> = {
     focus:
       'Gingembre séché, hibiscus et concentrés minéraux conformes aux normes LMR de l’UE.',
   },
-  'MENA & Pan-African Wholesale': {
-    region: 'Distribution Gros MENA & Panafricaine',
+  'UEMOA & Pan-African Wholesale': {
+    region: 'Distribution Gros UEMOA & Panafricaine',
     focus:
-      'Pièces automobiles, lubrifiants et kits solaires commerciaux AhzanEmporium.',
+      'Lubrifiants AhzanEmporium (USD/NGN/XOF), agro-commodités et kits solaires.',
   },
 };
 

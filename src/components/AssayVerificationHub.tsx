@@ -45,10 +45,10 @@ const VERIFICATION_DATABASE: VerificationRecord[] = [
       'Échantillon composite représentatif concassé issu de la ceinture pegmatitique de Nasarawa / Kwara sous Licence 65197 EL, conforme aux seuils de conversion batterie.',
     metrics: [
       { label: 'Li2O (Lithium Oxide)', value: '4.61%' },
+      { label: 'Contract Rate', value: '$207 / 1% Li2O' },
+      { label: 'FOB Value (4.61%)', value: '$954.27 / MT' },
       { label: 'Fe2O3 (Iron Oxide)', value: '1.12%' },
-      { label: 'SiO2 / Al2O3 Matrix', value: '63.8% / 22.4%' },
       { label: 'Moisture (As-Received)', value: '1.45%' },
-      { label: 'Loss on Ignition (LOI)', value: '2.10%' },
       { label: 'Umpire Protocol', value: 'SGS / Bureau Veritas' },
     ],
   },

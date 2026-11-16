@@ -23,7 +23,7 @@ import {
   PRODUCT_FR,
 } from '../i18n/translations';
 
-export type SettlementCurrency = 'USD' | 'EUR' | 'GBP' | 'CNY';
+export type SettlementCurrency = 'USD' | 'EUR' | 'GBP' | 'CNY' | 'NGN' | 'XOF';
 
 const FX_RATES: Record<
   SettlementCurrency,
@@ -33,14 +33,16 @@ const FX_RATES: Record<
   EUR: { symbol: '€', rateFromUsd: 0.92, label: 'EUR' },
   GBP: { symbol: '£', rateFromUsd: 0.79, label: 'GBP' },
   CNY: { symbol: '¥', rateFromUsd: 7.24, label: 'CNY' },
+  NGN: { symbol: '₦', rateFromUsd: 1390, label: 'NGN' },
+  XOF: { symbol: 'CFA ', rateFromUsd: 584.46, label: 'XOF' },
 };
 
 const PORT_CORRIDORS = [
   { id: 'ng-origin', label: 'Apapa / Tin Can, Nigeria (Origin)', transit: 'Origin Port', transitFr: 'Port d’origine', extraDays: 0 },
   { id: 'cn-qingdao', label: 'Qingdao / Ningbo, China', transit: '32–38 Days Sea', transitFr: '32–38 jours mer', extraDays: 35 },
-  { id: 'eu-rotterdam', label: 'Rotterdam / Hamburg, EU', transit: '18–22 Days Sea', transitFr: '18–22 jours mer', extraDays: 20 },
+  { id: 'eu-rotterdam', label: 'Rotterdam / Hamburg / London, EU/UK', transit: '18–22 Days Sea', transitFr: '18–22 jours mer', extraDays: 20 },
   { id: 'ae-jebel-ali', label: 'Jebel Ali, UAE', transit: '24–28 Days Sea', transitFr: '24–28 jours mer', extraDays: 26 },
-  { id: 'ke-mombasa', label: 'Mombasa / Tema / Dakar (Africa)', transit: '10–16 Days Sea', transitFr: '10–16 jours mer', extraDays: 13 },
+  { id: 'ke-mombasa', label: 'Cotonou / Dakar / Abidjan (UEMOA)', transit: '6–12 Days Sea', transitFr: '6–12 jours mer', extraDays: 9 },
 ];
 
 export interface CalculatorPrefill {
@@ -61,7 +63,7 @@ interface IncotermsCalculatorProps {
 }
 
 const INCOTERM_CODES: IncotermCode[] = ['EXW', 'FOB', 'CFR', 'CIF', 'DAP'];
-const CURRENCIES: SettlementCurrency[] = ['USD', 'EUR', 'GBP', 'CNY'];
+const CURRENCIES: SettlementCurrency[] = ['USD', 'EUR', 'GBP', 'CNY', 'NGN', 'XOF'];
 
 export default function IncotermsCalculator({
   onTransferToDealRoom,
@@ -71,6 +73,7 @@ export default function IncotermsCalculator({
   const [selectedProductId, setSelectedProductId] = useState<string>(
     COMMODITY_PRODUCTS[0].id
   );
+  const [li2oGradePct, setLi2oGradePct] = useState<number>(4.61);
   const [inputMode, setInputMode] = useState<'units' | 'containers'>('units');
   const [targetUnitsInput, setTargetUnitsInput] = useState<number>(100);
   const [containerCountInput, setContainerCountInput] = useState<number>(4);
@@ -138,14 +141,17 @@ export default function IncotermsCalculator({
           ? 0.98
           : 1.0;
 
-    const baseDiscountedExw = Math.round(
-      product.baseExwUsdPerUnit * volumeDiscountFactor
-    );
+    // For Lithium Mineral: exact $207 per 1% Li2O per MT
+    const rawFobUsd = product.ratePerPercentLi2O
+      ? Math.round(li2oGradePct * product.ratePerPercentLi2O * 100) / 100
+      : product.fobUsdPerUnit;
+
+    const discountedFobUsd = Math.round(rawFobUsd * volumeDiscountFactor);
     const termAdder = Math.round(
-      term.surchargePerUnitUsd + baseDiscountedExw * term.freightMultiplierPct
+      term.deltaFromFobUsd + discountedFobUsd * term.freightMultiplierFromFobPct
     );
-    const estimatedUnitPriceUsd = baseDiscountedExw + termAdder;
-    const estimatedTotalUsd = estimatedUnitPriceUsd * safeUnits;
+    const estimatedUnitPriceUsd = Math.max(1, discountedFobUsd + termAdder);
+    const estimatedTotalUsd = Math.round(estimatedUnitPriceUsd * safeUnits);
 
     const fx = FX_RATES[currency];
     const convertedUnitPrice = Math.round(estimatedUnitPriceUsd * fx.rateFromUsd);
@@ -182,7 +188,8 @@ export default function IncotermsCalculator({
     return {
       effectiveUnits: safeUnits,
       containersNeeded,
-      baseDiscountedExw,
+      rawFobUsd,
+      discountedFobUsd,
       termAdder,
       estimatedUnitPriceUsd,
       estimatedTotalUsd,
@@ -204,6 +211,7 @@ export default function IncotermsCalculator({
     maxUnitsPerContainer,
     incoterm,
     product,
+    li2oGradePct,
     containerSize,
     currency,
     lang,
@@ -252,18 +260,18 @@ export default function IncotermsCalculator({
             </p>
           </div>
 
-          {/* Multi-Currency Settlement Switcher */}
+          {/* Multi-Currency Settlement Switcher (USD, EUR, GBP, CNY, NGN, XOF) */}
           <div className="shrink-0">
             <span className="block text-xs font-semibold text-slate-600 mb-1.5">
               {t.calculator.currencyLabel}
             </span>
-            <div className="inline-flex p-1 bg-white border border-slate-200 rounded-lg">
+            <div className="inline-flex flex-wrap p-1 bg-white border border-slate-200 rounded-lg">
               {CURRENCIES.map((code) => (
                 <button
                   key={code}
                   type="button"
                   onClick={() => setCurrency(code)}
-                  className={`px-3 py-1.5 text-xs font-mono font-semibold rounded-md transition-colors cursor-pointer whitespace-nowrap ${
+                  className={`px-2.5 py-1.5 text-xs font-mono font-semibold rounded-md transition-colors cursor-pointer whitespace-nowrap ${
                     currency === code
                       ? 'bg-slate-900 text-white'
                       : 'text-slate-600 hover:text-slate-900'
@@ -343,6 +351,45 @@ export default function IncotermsCalculator({
                 {lang === 'fr' ? selectedCorridor.transitFr : selectedCorridor.transit}
               </span>
             </div>
+
+            {/* Dynamic $207 per 1% Li2O Grade Input (Shown when Lithium Ore is selected) */}
+            {product.ratePerPercentLi2O && (
+              <div className="p-4 bg-amber-50/70 border border-amber-200 rounded-lg space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label
+                    htmlFor="li2o-grade-range"
+                    className="text-xs font-bold text-slate-900"
+                  >
+                    {lang === 'fr'
+                      ? 'Teneur Li2O (%) — Tarif : 207 $ / 1% / MT'
+                      : 'Target Li2O Grade (%) — Rate: $207 per 1% / MT'}
+                  </label>
+                  <span className="font-mono text-sm font-bold text-amber-800 tabular-nums">
+                    {li2oGradePct.toFixed(2)}% × $207 = $
+                    {(li2oGradePct * product.ratePerPercentLi2O).toFixed(2)} / MT FOB
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <input
+                    id="li2o-grade-range"
+                    type="range"
+                    min={3.0}
+                    max={6.0}
+                    step={0.01}
+                    value={li2oGradePct}
+                    onChange={(e) => setLi2oGradePct(Number(e.target.value))}
+                    className="flex-1 accent-amber-600 cursor-pointer"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setLi2oGradePct(4.61)}
+                    className="px-2.5 py-1 text-[11px] font-mono font-semibold text-slate-800 bg-white border border-amber-300 rounded hover:bg-amber-100 cursor-pointer whitespace-nowrap"
+                  >
+                    4.61% (ZMGN057)
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* 2. Volume Mode + Container Size */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -562,7 +609,7 @@ export default function IncotermsCalculator({
                 <div className="text-xs text-slate-400 mb-1">
                   {t.calculator.unitPriceLabel}
                 </div>
-                <div className="font-mono text-2xl sm:text-3xl font-bold text-white tabular-nums">
+                <div className="font-mono text-xl sm:text-2xl font-bold text-white tabular-nums">
                   {calculation.fx.symbol}
                   {calculation.convertedUnitPrice.toLocaleString('en-US')}
                 </div>
@@ -580,7 +627,7 @@ export default function IncotermsCalculator({
                 <div className="text-xs text-slate-400 mb-1">
                   {t.calculator.totalValueLabel}
                 </div>
-                <div className="font-mono text-2xl sm:text-3xl font-bold text-amber-400 tabular-nums">
+                <div className="font-mono text-xl sm:text-2xl font-bold text-amber-400 tabular-nums">
                   {calculation.fx.symbol}
                   {calculation.convertedTotal.toLocaleString('en-US')}
                 </div>
@@ -594,18 +641,19 @@ export default function IncotermsCalculator({
             <div className="pt-4 border-t border-slate-800 space-y-2 text-xs">
               <div className="flex justify-between text-slate-300">
                 <span>
-                  {t.calculator.exwBase} ({calculation.effectiveUnits} {product.unitLabel})
+                  FOB {lang === 'fr' ? 'Origine' : 'Baseline'} ({calculation.effectiveUnits} {product.unitLabel})
                 </span>
                 <span className="font-mono tabular-nums">
-                  ${calculation.baseDiscountedExw.toLocaleString('en-US')} / {product.unitLabel}
+                  ${calculation.discountedFobUsd.toLocaleString('en-US')} / {product.unitLabel}
                 </span>
               </div>
               <div className="flex justify-between text-slate-300">
                 <span>
-                  {incoterm} {t.calculator.adderLabel}
+                  {incoterm} {lang === 'fr' ? 'Ajustement Fret / Terme' : 'Term & Freight Adjustment'}
                 </span>
                 <span className="font-mono tabular-nums">
-                  +${calculation.termAdder.toLocaleString('en-US')} / {product.unitLabel}
+                  {calculation.termAdder >= 0 ? '+' : ''}
+                  ${calculation.termAdder.toLocaleString('en-US')} / {product.unitLabel}
                 </span>
               </div>
             </div>

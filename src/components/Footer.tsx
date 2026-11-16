@@ -37,6 +37,11 @@ export default function Footer() {
                 </a>
               </li>
               <li>
+                <a href="#price-lists" className="hover:text-white transition-colors">
+                  {lang === 'fr' ? 'Tarifs 2026' : 'Price Lists 2026'}
+                </a>
+              </li>
+              <li>
                 <a href="#calculator" className="hover:text-white transition-colors">
                   {t.nav.calculator}
                 </a>
@@ -66,23 +71,23 @@ export default function Footer() {
             <ul className="space-y-2 text-sm font-mono">
               <li>
                 <a
-                  href="mailto:ceo@ahzan.tech"
-                  className="hover:text-amber-400 transition-colors"
-                >
-                  ceo@ahzan.tech
-                </a>
-              </li>
-              <li>
-                <a
                   href="mailto:abdoul@ahzantechltd.com"
                   className="hover:text-amber-400 transition-colors"
                 >
                   abdoul@ahzantechltd.com
                 </a>
               </li>
+              <li>
+                <a
+                  href="tel:+2349033524525"
+                  className="hover:text-amber-400 transition-colors"
+                >
+                  +234 903 352 4525
+                </a>
+              </li>
             </ul>
             <p className="text-xs text-slate-500 pt-1">
-              Abdulganiyu Hamza, Founder &amp; CEO
+              Abdulganiyu Hamza, Founder &amp; CEO · Kano State, Nigeria
             </p>
           </div>
         </div>
